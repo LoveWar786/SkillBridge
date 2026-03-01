@@ -51,10 +51,12 @@ Instead of a single, massive prompt, SkillBridge utilizes the Gemini Reasoning c
 - **Input:** Raw text from Mammoth.js (CV) and user-provided JD.
 - **Task:** Normalizes unstructured text. Identifies and lists technical skills, soft skills, and experience levels from both documents.
 - **Output:** Two clean arrays of skills (User Skills & Required Skills). Handles the variety and ambiguity of language (e.g., recognizing that "ReactJS" and "React.js" are the same).
+ 
 **2. The Evaluation Agent:**
 - **Input:** The normalized skill arrays from the Extraction Agent.
 - **Task:** Performs deep semantic matching. It categorizes skills into Matched, Missing, and Transferable. It calculates the core metric: `Readiness Score = (Matched Skills ÷ Total Required Skills) × 100`
 - **Output:** Structured scoring data mapped directly into Recharts.js for immediate visual feedback (e.g., Donut charts for score, Radar charts for skill coverage).
+  
 **3. The Career Coach Agent:**
 - **Input:** The calculated skill gaps and the target company's industry context.
 - **Task:** Formulates a personalized, explainable learning path. It breaks down the missing skills into actionable steps (e.g., "Week 1: Focus on learning X to satisfy requirement Y").
