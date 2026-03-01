@@ -1,0 +1,2 @@
+# SkillBridge
+An AI-powered skill gap analysis platform that compares your skills against job descriptions to provide explainable readiness insights and learning paths.
