@@ -70,4 +70,27 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   sources?: Array<{ title: string; uri: string }>;
+  attachment?: {
+    name: string;
+    preview: string;
+    type: 'image' | 'file';
+  };
+}
+
+export interface AnalysisHistoryItem {
+  id: string;
+  userId: string;
+  timestamp: number;
+  jobRole: string;
+  companyName?: string;
+  result: AnalysisResult;
+}
+
+declare global {
+  interface Window {
+    aistudio?: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
 }

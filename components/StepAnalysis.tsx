@@ -202,279 +202,481 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     }
   };
 
+  const getIconPng = async (id: string): Promise<string> => {
+    const svgEl = document.getElementById(id) as unknown as SVGSVGElement | null;
+    if (!svgEl) return '';
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const scale = 4;
+        const width = 24;
+        const height = 24;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve('');
+        ctx.scale(scale, scale);
+        
+        if (!svgEl.getAttribute('xmlns')) {
+            svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        }
+        
+        const svgString = new XMLSerializer().serializeToString(svgEl);
+        const img = new Image();
+        const base64 = btoa(unescape(encodeURIComponent(svgString)));
+        
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve('');
+        img.src = 'data:image/svg+xml;base64,' + base64;
+    });
+  };
+
   // --- High Quality PDF Generation ---
-  const handleSavePDF = () => {
+  const handleSavePDF = async () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 15;
     let yPos = 20;
 
+    // Fetch Icons
+    const brainIcon = await getIconPng('pdf-icon-brain');
+    const alertIcon = await getIconPng('pdf-icon-alert');
+    const bookIcon = await getIconPng('pdf-icon-book');
+    const briefcaseIcon = await getIconPng('pdf-icon-briefcase');
+
+    // Detect Dark Mode
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const bgColor = isDarkMode ? [15, 23, 42] : [255, 255, 255]; // Slate-900 or White
+    const textColor = isDarkMode ? [255, 255, 255] : [30, 41, 59]; // White or Slate-800
+    const secondaryTextColor = isDarkMode ? [148, 163, 184] : [71, 85, 105]; // Slate-400 or Slate-600
+    const cardBgColor = isDarkMode ? [30, 41, 59] : [255, 255, 255]; // Slate-800 or White
+    const cardBorderColor = isDarkMode ? [51, 65, 85] : [226, 232, 240]; // Slate-700 or Slate-200
+
+    // Set Background
+    doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
     // --- Helpers ---
     const checkSpace = (h: number) => {
-        // More generous buffer at bottom
         if (yPos + h > pageHeight - margin - 10) {
             doc.addPage();
+            doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+            doc.rect(0, 0, pageWidth, pageHeight, 'F');
             yPos = 20;
             return true;
         }
         return false;
     };
 
-    const drawCard = (x: number, y: number, w: number, h: number, bg: [number, number, number] = [255,255,255]) => {
+    const drawCard = (x: number, y: number, w: number, h: number, bg: [number, number, number] = cardBgColor as [number, number, number]) => {
         doc.setFillColor(bg[0], bg[1], bg[2]);
-        doc.setDrawColor(226, 232, 240); // Slate-200
-        doc.roundedRect(x, y, w, h, 3, 3, 'FD');
+        doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]);
+        doc.setLineWidth(0.5);
+        doc.roundedRect(x, y, w, h, 4, 4, 'FD');
+    };
+
+    // --- Icon Helpers (Refined for Lucide look) ---
+    const drawZapIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Lucide Zap: 13,2 13,10 19,10 11,22 11,14 5,14
+        doc.triangle(x + 13*s, y + 2*s, x + 13*s, y + 10*s, x + 5*s, y + 14*s, 'F');
+        doc.triangle(x + 13*s, y + 10*s, x + 19*s, y + 10*s, x + 11*s, y + 22*s, 'F');
+        doc.triangle(x + 13*s, y + 10*s, x + 5*s, y + 14*s, x + 11*s, y + 14*s, 'F'); 
+    };
+
+    const drawAlertIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Circle
+        doc.circle(x + 12*s, y + 12*s, 10*s, 'F');
+        // Exclamation (white)
+        doc.setFillColor(255, 255, 255);
+        doc.rect(x + 11*s, y + 7*s, 2*s, 6*s, 'F');
+        doc.circle(x + 12*s, y + 16*s, 1.5*s, 'F');
+    };
+
+    const drawBookIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Book Open Shape
+        doc.rect(x + 4*s, y + 6*s, 6*s, 12*s, 'F'); // Left Page
+        doc.rect(x + 14*s, y + 6*s, 6*s, 12*s, 'F'); // Right Page
+        doc.rect(x + 10*s, y + 6*s, 4*s, 12*s, 'F'); // Spine/Center
+    };
+
+    const drawBriefcaseIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Handle
+        doc.rect(x + 8*s, y + 3*s, 8*s, 4*s, 'F');
+        // Body
+        doc.roundedRect(x + 3*s, y + 7*s, 18*s, 13*s, 1*s, 1*s, 'F');
+        // Cutout
+        doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
+        doc.rect(x + 10*s, y + 5*s, 4*s, 2*s, 'F');
+    };
+
+    const drawLightbulbIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Bulb
+        doc.circle(x + 12*s, y + 9*s, 6*s, 'F');
+        // Base
+        doc.rect(x + 9*s, y + 15*s, 6*s, 4*s, 'F');
+        // Bottom contact
+        doc.rect(x + 10*s, y + 20*s, 4*s, 2*s, 'F');
     };
 
     // --- Header ---
-    doc.setFillColor(37, 99, 235); // Blue-600
+    doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
     doc.rect(0, 0, pageWidth, 50, 'F');
     
-    doc.setTextColor(255, 255, 255);
+    // Logo (Zap)
+    const logoColor: [number, number, number] = [59, 130, 246]; // Blue-500 (Website color)
+    drawZapIcon(margin, 15, 16, logoColor); // Slightly larger
+
+    // Title
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.text("SkillBridge", margin, 25);
+    doc.setFontSize(24); // Larger to match website
+    doc.text("SkillBridge", margin + 22, 26);
+
+    // Subtitle
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(14);
-    doc.text("AI-Powered Career Analysis", margin, 34);
+    doc.setFontSize(12);
+    doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+    doc.text("AI-Powered Career Analysis", margin + 22, 34);
 
     if (candidateName) {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(20); // Even Bigger Name
-        doc.setTextColor(255, 255, 255); 
-        
-        // Calculate text width to place experience beside it
-        const nameWidth = doc.getTextWidth(candidateName);
-        const startX = pageWidth - margin - nameWidth;
-        
-        doc.text(candidateName, pageWidth - margin, 25, { align: 'right' });
+        doc.setFontSize(14);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text(candidateName, pageWidth - margin, 22, { align: 'right' });
         
         if (experienceYears !== undefined) {
-             const expText = `•  ${experienceYears} Years Exp.`;
-             doc.setFontSize(12);
+             const expText = `${experienceYears} Years Exp.`;
+             doc.setFontSize(11);
              doc.setFont("helvetica", "normal");
-             doc.setTextColor(219, 234, 254); // Blue-100
-             doc.text(expText, pageWidth - margin - nameWidth - 5, 25, { align: 'right' });
+             doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+             doc.text(expText, pageWidth - margin, 28, { align: 'right' });
         }
         
         doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(219, 234, 254);
-        doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth - margin, 35, { align: 'right' });
+        doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth - margin, 34, { align: 'right' });
     }
 
-    yPos = 65;
+    // Divider
+    doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]);
+    doc.setLineWidth(1);
+    doc.line(margin, 45, pageWidth - margin, 45);
 
-    // --- Top Summary Section (Score + Summary) ---
-    // Draw Readiness Score Card (Left)
-    drawCard(margin, yPos, 60, 50);
+    yPos = 55;
+
+    // --- Top Summary Section ---
+    // ... (Score logic same as before) ...
+    let r=239, g=68, b=68; let bgR=254, bgG=242, bgB=242;
+    if (result.readinessScore >= 80) { r=34; g=197; b=94; bgR=240; bgG=253; bgB=244; }
+    else if (result.readinessScore >= 60) { r=59; g=130; b=246; bgR=239; bgG=246; bgB=255; }
+    else if (result.readinessScore >= 40) { r=234; g=179; b=8; bgR=254; bgG=252; bgB=232; }
+    else if (result.readinessScore >= 20) { r=249; g=115; b=22; bgR=255; bgG=247; bgB=237; }
+
+    drawCard(margin, yPos, 60, 45, [bgR, bgG, bgB]);
     
-    doc.setTextColor(100, 116, 139); // Slate-500
+    doc.setTextColor(r, g, b);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text("READINESS SCORE", margin + 30, yPos + 10, { align: "center" });
+    doc.text("READINESS SCORE", margin + 30, yPos + 12, { align: "center" });
 
-    let r=239, g=68, b=68; // Red
-    if (result.readinessScore >= 80) { r=34; g=197; b=94; } // Green
-    else if (result.readinessScore >= 60) { r=59; g=130; b=246; } // Blue
-    else if (result.readinessScore >= 40) { r=234; g=179; b=8; } // Yellow
-
-    doc.setTextColor(r, g, b);
-    doc.setFontSize(32);
+    doc.setFontSize(36);
     doc.setFont("helvetica", "bold");
-    doc.text(`${result.readinessScore}%`, margin + 30, yPos + 26, { align: "center" });
+    doc.text(`${result.readinessScore}%`, margin + 30, yPos + 28, { align: "center" });
 
     doc.setFillColor(r, g, b); 
-    doc.roundedRect(margin + 10, yPos + 34, 40, 8, 2, 2, 'F');
+    doc.roundedRect(margin + 10, yPos + 34, 40, 8, 4, 4, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
-    doc.text(result.readinessLevel, margin + 30, yPos + 39, { align: "center" });
+    doc.text(result.readinessLevel.toUpperCase(), margin + 30, yPos + 39.5, { align: "center" });
 
-    // Draw Executive Summary Card (Right)
-    const summaryWidth = pageWidth - margin * 3 - 60;
-    drawCard(margin + 70, yPos, summaryWidth, 50);
+    const summaryWidth = pageWidth - margin * 2 - 65;
+    drawCard(margin + 65, yPos, summaryWidth, 48);
     
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(12);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text("AI Executive Summary", margin + 75, yPos + 10);
+    
+    if (brainIcon) {
+        doc.addImage(brainIcon, 'PNG', margin + 70, yPos + 7, 6, 6);
+        doc.text("AI Executive Summary", margin + 78, yPos + 12);
+    } else {
+        doc.text("AI Executive Summary", margin + 75, yPos + 12);
+    }
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105);
-    const summaryLines = doc.splitTextToSize(result.executiveSummary, summaryWidth - 10);
-    doc.text(summaryLines, margin + 75, yPos + 18);
+    doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+    const summaryLines = doc.splitTextToSize(result.executiveSummary, summaryWidth - 20);
+    doc.text(summaryLines, margin + 75, yPos + 20);
 
-    yPos += 60;
+    yPos += 55;
 
-    // --- Critical Skill Gaps (Full Width) ---
-    checkSpace(30);
-    doc.setFillColor(254, 242, 242); // Red-50
-    doc.rect(margin, yPos, pageWidth - (margin * 2), 12, 'F');
-    doc.setTextColor(185, 28, 28); // Red-700
-    doc.setFontSize(12);
+    // --- Critical Skill Gaps ---
+    checkSpace(40);
+    // Section Header
+    doc.setFillColor(isDarkMode ? 69 : 254, isDarkMode ? 10 : 242, isDarkMode ? 10 : 242);
+    doc.roundedRect(margin, yPos, pageWidth - (margin * 2), 14, 4, 4, 'F');
+    
+    if (alertIcon) {
+        doc.addImage(alertIcon, 'PNG', margin + 6, yPos + 3.5, 7, 7);
+    } else {
+        drawAlertIcon(margin + 6, yPos + 3, 8, isDarkMode ? [248, 113, 113] : [220, 38, 38]);
+    }
+    
+    doc.setTextColor(isDarkMode ? 252 : 185, isDarkMode ? 165 : 28, isDarkMode ? 165 : 28);
+    doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.text("Critical Skill Gaps", margin + 5, yPos + 8);
-    yPos += 15;
+    doc.text("Critical Skill Gaps", margin + 16, yPos + 9.5);
+    yPos += 16;
 
     result.skillGaps.forEach(gap => {
         const fullWidth = pageWidth - (margin * 2);
-        const reasonLines = doc.splitTextToSize(gap.reason, fullWidth - 20);
-        const cardHeight = 25 + (reasonLines.length * 4);
+        const reasonLines = doc.splitTextToSize(gap.reason, fullWidth - 30);
+        const cardHeight = 24 + (reasonLines.length * 5);
         
-        checkSpace(cardHeight + 5);
-        
-        // Card Background
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(241, 245, 249);
-        doc.roundedRect(margin, yPos, fullWidth, cardHeight, 3, 3, 'FD');
+        checkSpace(cardHeight + 8);
+        drawCard(margin, yPos, fullWidth, cardHeight);
 
-        // Priority Dot
+        // Priority Bullet (Left side)
         const isHigh = gap.priority === 'High';
-        doc.setFillColor(isHigh ? 239 : 234, isHigh ? 68 : 179, isHigh ? 68 : 8);
-        doc.circle(margin + 6, yPos + 8, 2, 'F');
+        const priorityColor = isHigh ? [239, 68, 68] : [234, 179, 8];
+        doc.setFillColor(priorityColor[0], priorityColor[1], priorityColor[2]);
+        doc.circle(margin + 6, yPos + 11.5, 1.5, 'F');
 
-        // Text
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(11);
-        doc.setFont("helvetica", "bold");
-        doc.text(gap.skill, margin + 12, yPos + 9);
-
-        // Status Badge
-        doc.setFillColor(241, 245, 249);
-        const skillWidth = doc.getTextWidth(gap.skill);
-        doc.roundedRect(margin + 12 + skillWidth + 5, yPos + 5, doc.getTextWidth(gap.status) + 6, 6, 1, 1, 'F');
-        doc.setTextColor(100, 116, 139);
+        // Priority Badge (Right Aligned)
+        const priorityBg = isHigh ? [254, 242, 242] : [254, 252, 232];
+        
+        // Badge BG
+        doc.setFillColor(priorityBg[0], priorityBg[1], priorityBg[2]);
+        doc.roundedRect(margin + fullWidth - 35, yPos + 6, 25, 6, 3, 3, 'F');
+        // Badge Text
+        doc.setTextColor(priorityColor[0], priorityColor[1], priorityColor[2]);
         doc.setFontSize(8);
-        doc.text(gap.status, margin + 12 + skillWidth + 8, yPos + 9);
+        doc.setFont("helvetica", "bold");
+        doc.text(gap.priority.toUpperCase(), margin + fullWidth - 22.5, yPos + 10, { align: 'center' });
+
+        // Title
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(gap.skill, margin + 12, yPos + 10);
+
+        // Status Badge (Next to Title) - Compact
+        const skillWidth = doc.getTextWidth(gap.skill);
+        // Dark Grey Badge like screenshot
+        doc.setFillColor(51, 65, 85); // Slate-700
+        const statusW = doc.getTextWidth(gap.status) + 8;
+        doc.roundedRect(margin + 12 + skillWidth + 8, yPos + 6, statusW, 6, 3, 3, 'F');
+        doc.setTextColor(203, 213, 225); // Slate-300
+        doc.setFontSize(8);
+        doc.text(gap.status.toUpperCase(), margin + 12 + skillWidth + 12, yPos + 10);
 
         // Reason
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(9);
+        doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+        doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text(reasonLines, margin + 12, yPos + 16);
+        doc.text(reasonLines, margin + 12, yPos + 18);
 
-        yPos += cardHeight + 5;
+        yPos += cardHeight + 4;
     });
 
-    yPos += 10;
+    yPos += 8;
 
     // --- Recommended Learning Path (Full Width) ---
-    checkSpace(30);
-    doc.setFillColor(239, 246, 255); // Blue-50
-    doc.rect(margin, yPos, pageWidth - (margin * 2), 12, 'F');
-    doc.setTextColor(29, 78, 216); // Blue-700
-    doc.setFontSize(12);
+    checkSpace(40);
+    doc.setFillColor(isDarkMode ? 30 : 239, isDarkMode ? 58 : 246, isDarkMode ? 138 : 255); // Blue-50 or Dark Blue
+    doc.roundedRect(margin, yPos, pageWidth - (margin * 2), 14, 4, 4, 'F');
+    
+    // Icon
+    if (bookIcon) {
+        doc.addImage(bookIcon, 'PNG', margin + 6, yPos + 3.5, 7, 7);
+    } else {
+        drawBookIcon(margin + 6, yPos + 3, 8, isDarkMode ? [96, 165, 250] : [37, 99, 235]);
+    }
+
+    doc.setTextColor(isDarkMode ? 147 : 29, isDarkMode ? 197 : 78, isDarkMode ? 253 : 216); // Blue-700 or Light Blue
+    doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.text("Recommended Learning Path", margin + 5, yPos + 8);
-    yPos += 15;
+    doc.text("Recommended Learning Path", margin + 16, yPos + 9.5);
+    yPos += 16;
 
     result.learningPath.forEach((step, i) => {
         const fullWidth = pageWidth - (margin * 2);
-        const descLines = doc.splitTextToSize(step.description, fullWidth - 20);
-        const cardHeight = 35 + (descLines.length * 4);
+        const descLines = doc.splitTextToSize(step.description, fullWidth - 30);
         
-        checkSpace(cardHeight + 5);
+        // Calculate height including the suggestion box
+        // Title (12) + Desc (lines*5) + Gap (8) + SuggestionBox (22) + Padding (15)
+        const suggestionBoxHeight = 22;
+        const cardHeight = 25 + (descLines.length * 5) + suggestionBoxHeight;
+        
+        checkSpace(cardHeight + 8);
 
-        // Draw connecting line from prev step if not first
-        // (Simplified for sequential vertical layout - no line needed if simple stack, 
-        // but let's keep it simple and clean cards)
-        
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(margin, yPos, fullWidth, cardHeight, 3, 3, 'FD');
+        drawCard(margin, yPos, fullWidth, cardHeight);
 
         // Step ID
         doc.setTextColor(37, 99, 235);
-        doc.setFontSize(8);
+        doc.setFontSize(9);
         doc.setFont("helvetica", "bold");
-        doc.text(step.step, margin + 5, yPos + 8);
+        doc.text(step.step.toUpperCase(), margin + 10, yPos + 8);
 
         // Title
-        doc.setTextColor(15, 23, 42); // Slate-900
-        doc.setFontSize(11);
-        doc.text(step.title, margin + 5, yPos + 14);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.setFontSize(12);
+        doc.text(step.title, margin + 10, yPos + 14);
         
-        // Time Badge
-        const timeW = doc.getTextWidth(step.estimatedTime) + 6;
-        doc.setFillColor(239, 246, 255); // Blue-50
-        doc.roundedRect(margin + 5, yPos + 18, timeW, 6, 2, 2, 'F');
-        doc.setTextColor(29, 78, 216); // Blue-700
-        doc.setFontSize(8);
-        doc.text(step.estimatedTime, margin + 8, yPos + 22);
+        // Time Badge - Same Line as Title, Right Aligned
+        const timeW = doc.getTextWidth(step.estimatedTime) + 10;
+        const timeX = margin + fullWidth - timeW - 10;
+        
+        doc.setFillColor(isDarkMode ? 30 : 239, isDarkMode ? 58 : 246, isDarkMode ? 138 : 255);
+        doc.roundedRect(timeX, yPos + 8, timeW, 8, 4, 4, 'F');
+        
+        doc.setTextColor(isDarkMode ? 147 : 29, isDarkMode ? 197 : 78, isDarkMode ? 253 : 216);
+        doc.setFontSize(9);
+        doc.text(step.estimatedTime, timeX + 5, yPos + 13.5);
 
         // Desc
-        doc.setTextColor(71, 85, 105);
-        doc.setFontSize(9);
+        doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+        doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text(descLines, margin + 5, yPos + 30);
+        doc.text(descLines, margin + 10, yPos + 22);
 
-        yPos += cardHeight + 5;
+        // Suggestion Box (Website Style Match)
+        const boxY = yPos + 24 + (descLines.length * 5);
+        // Dark background for box (Slate-800) - Match screenshot
+        const boxBg = isDarkMode ? [30, 41, 59] : [241, 245, 249]; // Slate-800 or Slate-100
+        doc.setFillColor(boxBg[0], boxBg[1], boxBg[2]);
+        // No border, just fill
+        doc.roundedRect(margin + 10, boxY, fullWidth - 20, 22, 4, 4, 'F');
+        
+        // Icon Box (Amber-900/50 or Amber-100)
+        const iconBg = isDarkMode ? [69, 26, 3] : [254, 252, 232]; // Amber-950 or Amber-50
+        doc.setFillColor(iconBg[0], iconBg[1], iconBg[2]);
+        doc.roundedRect(margin + 14, boxY + 4, 14, 14, 3, 3, 'F');
+        
+        // Icon (Amber-500 or Amber-600)
+        drawLightbulbIcon(margin + 15, boxY + 5, 12, [245, 158, 11]); // Amber-500
+
+        // Label
+        doc.setTextColor(isDarkMode ? 148 : 100, isDarkMode ? 163 : 116, isDarkMode ? 184 : 139); // Slate-400 or Slate-500
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold");
+        doc.text("RECOMMENDED SUGGESTION", margin + 34, boxY + 8);
+
+        // Resource Name (Bold)
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(step.resourceName, margin + 34, boxY + 13);
+
+        // Suggestion
+        doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(step.resourceSuggestion, margin + 34, boxY + 18);
+
+        yPos += cardHeight + 4;
     });
 
-    yPos += 10;
+    yPos += 8;
     
-    // --- Alternative Roles (Dark Section) ---
-    // Calculate required height for roles row
-    const rolesHeight = 70;
-    checkSpace(rolesHeight);
+    // --- Alternative Roles (Vertical Layout) ---
+    // Calculate total height needed for background
+    let totalSectionHeight = 18; // Header + padding
+    const fullWidth = pageWidth - (margin * 2);
     
-    // Dark Background
-    doc.setFillColor(15, 23, 42); // Slate-900
-    doc.roundedRect(margin, yPos, pageWidth - (margin * 2), rolesHeight, 3, 3, 'F');
+    sortedRoles.forEach(role => {
+        const matchLines = doc.splitTextToSize(role.matchReason, fullWidth - 30);
+        const cardHeight = 28 + (matchLines.length * 5);
+        totalSectionHeight += cardHeight + 4;
+    });
     
-    // Title
+    checkSpace(totalSectionHeight > (pageHeight - margin * 2) ? 40 : totalSectionHeight);
+    
+    // Draw Section Background (Header)
+    doc.setFillColor(isDarkMode ? 15 : 15, isDarkMode ? 23 : 23, isDarkMode ? 42 : 42); // Slate-900
+    // If it fits on one page, draw the full background
+    if (yPos + totalSectionHeight <= pageHeight - margin) {
+        doc.roundedRect(margin, yPos, fullWidth, totalSectionHeight, 6, 6, 'F');
+    } else {
+        // Just draw header background if it spans multiple pages
+        doc.roundedRect(margin, yPos, fullWidth, 14, 4, 4, 'F');
+    }
+    
+    // Icon
+    if (briefcaseIcon) {
+        doc.addImage(briefcaseIcon, 'PNG', margin + 8, yPos + 3.5, 7, 7);
+    } else {
+        drawBriefcaseIcon(margin + 6, yPos + 3, 8, [255, 255, 255]);
+    }
+
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.text("Alternative Career Paths", margin + 10, yPos + 12);
+    doc.text("Alternative Career Paths", margin + 18, yPos + 9.5);
     
-    doc.setTextColor(148, 163, 184); // Slate-400
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Based on your current skill profile:", margin + 10, yPos + 20);
+    yPos += 18;
 
-    // Render Roles Grid (Horizontal in PDF)
-    let roleX = margin + 10;
-    const roleW = (pageWidth - (margin * 2) - 40) / 3;
-    
-    sortedRoles.slice(0, 3).forEach(role => {
-        // Inner Card (Slate-800)
-        doc.setFillColor(30, 41, 59);
-        doc.roundedRect(roleX, yPos + 25, roleW, 35, 2, 2, 'F');
-        
+    sortedRoles.forEach(role => {
+        const matchLines = doc.splitTextToSize(role.matchReason, fullWidth - 30);
+        const cardHeight = 28 + (matchLines.length * 5);
+
+        checkSpace(cardHeight + 8);
+
+        // Card BG - Dark theme for alternative roles
+        const roleCardBg: [number, number, number] = isDarkMode ? [30, 41, 59] : [15, 23, 42]; // Slate-800 or Slate-900
+        doc.setFillColor(roleCardBg[0], roleCardBg[1], roleCardBg[2]);
+        doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]);
+        doc.setLineWidth(0.5);
+        doc.roundedRect(margin + 4, yPos, fullWidth - 8, cardHeight, 4, 4, 'FD');
+
         // Role Name
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(10);
+        doc.setTextColor(255, 255, 255); // Always white text on dark bg
+        doc.setFontSize(13);
         doc.setFont("helvetica", "bold");
-        const safeRole = role.role.length > 20 ? role.role.substring(0, 18) + '...' : role.role;
-        doc.text(safeRole, roleX + 5, yPos + 32);
+        doc.text(role.role, margin + 14, yPos + 10);
 
-        // Percent
-        doc.setTextColor(191, 219, 254); // Blue-200
-        doc.setFontSize(8);
-        doc.text(`${role.matchPercentage}%`, roleX + roleW - 5, yPos + 32, { align: 'right' });
+        // Percent Badge
+        const percentText = `${role.matchPercentage}% Match`;
+        const percentW = doc.getTextWidth(percentText) + 8;
+        doc.setFillColor(30, 58, 138); // Blue-900
+        doc.roundedRect(pageWidth - margin - percentW - 14, yPos + 6, percentW, 6, 2, 2, 'F');
+        doc.setTextColor(147, 197, 253); // Blue-300
+        doc.setFontSize(9);
+        doc.text(percentText, pageWidth - margin - percentW - 10, yPos + 10);
 
         // Bar BG
-        doc.setFillColor(51, 65, 85);
-        doc.rect(roleX + 5, yPos + 36, roleW - 10, 2, 'F');
+        doc.setFillColor(51, 65, 85); // Slate-700
+        doc.roundedRect(margin + 14, yPos + 14, fullWidth - 28, 2.5, 1.25, 1.25, 'F');
         // Bar Fill
-        doc.setFillColor(59, 130, 246);
-        const fillW = ((roleW - 10) * role.matchPercentage) / 100;
-        doc.rect(roleX + 5, yPos + 36, fillW, 2, 'F');
+        doc.setFillColor(59, 130, 246); // Blue-500
+        const fillW = ((fullWidth - 28) * role.matchPercentage) / 100;
+        doc.roundedRect(margin + 14, yPos + 14, fillW, 2.5, 1.25, 1.25, 'F');
         
-        // Reason (Tiny)
-        doc.setTextColor(148, 163, 184);
-        doc.setFontSize(7);
+        // Reason (Full)
+        doc.setTextColor(148, 163, 184); // Slate-400
+        doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        const matchLines = doc.splitTextToSize(role.matchReason, roleW - 10);
-        if (matchLines.length > 0) doc.text(matchLines[0], roleX + 5, yPos + 43);
+        doc.text(matchLines, margin + 14, yPos + 22);
 
-        roleX += roleW + 10;
+        yPos += cardHeight + 4;
     });
 
-    doc.save("SkillBridge_Analysis.pdf");
+    const filename = `SkillBridge Analysis ${candidateName || 'User'}.pdf`;
+    doc.save(filename);
   };
 
   // Cleanup on unmount
@@ -489,6 +691,14 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
+      {/* Hidden SVGs for PDF Generation */}
+      <div style={{ display: 'none' }}>
+        <BrainCircuit id="pdf-icon-brain" color="#a855f7" size={24} />
+        <AlertTriangle id="pdf-icon-alert" color="#ef4444" size={24} />
+        <BookOpen id="pdf-icon-book" color="#3b82f6" size={24} />
+        <Briefcase id="pdf-icon-briefcase" color="#60a5fa" size={24} />
+      </div>
+
       <div className="flex flex-col md:flex-row gap-8 items-start">
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 flex-shrink-0 w-full md:w-80 flex flex-col items-center justify-center text-center">
             {candidateName && (
