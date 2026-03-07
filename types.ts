@@ -77,13 +77,33 @@ export interface ChatMessage {
   };
 }
 
+export interface UserFeedback {
+  rating: number; // 1-5
+  comment?: string;
+  timestamp: number;
+}
+
 export interface AnalysisHistoryItem {
   id: string;
   userId: string;
   timestamp: number;
   jobRole: string;
   companyName?: string;
+  candidateName?: string;
+  experienceYears?: number;
   result: AnalysisResult;
+  feedback?: UserFeedback;
+  modelUsed?: string;
+  cost?: number;
+}
+
+export interface CreditUsageLog {
+  id: string;
+  userId: string;
+  timestamp: number;
+  amount: number;
+  action: string; // e.g., "Analysis: Software Engineer", "Chat"
+  modelUsed?: string;
 }
 
 declare global {

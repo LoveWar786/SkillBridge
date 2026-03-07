@@ -27,6 +27,8 @@ const App: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [jobContext, setJobContext] = useState<JobContext | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | undefined>(undefined);
+  const [currentAnalysisHasFeedback, setCurrentAnalysisHasFeedback] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
@@ -41,6 +43,8 @@ const App: React.FC = () => {
   const [isCreditPurchaseModalOpen, setIsCreditPurchaseModalOpen] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [showVerificationAlert, setShowVerificationAlert] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [resendVerificationMessage, setResendVerificationMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [emailChangeNotification, setEmailChangeNotification] = useState<{old: string, new: string} | null>(null);
   const [nameChangeNotification, setNameChangeNotification] = useState<{old: string, new: string} | null>(null);
   const pendingEmailRef = useRef<string | undefined>(undefined);
@@ -248,6 +252,10 @@ const App: React.FC = () => {
   const handleJobAnalysis = async (context: JobContext) => {
     if (!profile) return;
 
+    // Show loading state immediately for better responsiveness
+    setIsAnalyzing(true);
+    setCurrentStep(AppStep.ANALYZING);
+
     const currentCredits = user ? user.credits : guestCredits;
     
     // Determine cost based on model speed
@@ -256,6 +264,9 @@ const App: React.FC = () => {
     if (context.modelSpeed === 'deep') cost = 5;
 
     if (currentCredits < cost) {
+      setIsAnalyzing(false);
+      setCurrentStep(AppStep.JOB_SELECTION);
+      
       if (!user) {
         // Prompt guest to login/register for more credits
         setIsAuthModalOpen(true);
@@ -276,6 +287,8 @@ const App: React.FC = () => {
         setUser({ ...user, credits: newCredits });
       } catch (error) {
         console.error("Failed to update credits:", error);
+        setIsAnalyzing(false);
+        setCurrentStep(AppStep.JOB_SELECTION);
         // Don't update UI if server update fails
         return;
       }
@@ -285,19 +298,32 @@ const App: React.FC = () => {
     }
 
     setJobContext(context);
-    setIsAnalyzing(true);
-    setCurrentStep(AppStep.ANALYZING);
 
     try {
-      const result = await analyzeJobReadiness(profile, context);
+      const { result, modelUsed } = await analyzeJobReadiness(profile, context);
       setAnalysisResult(result);
       
       // Save history if logged in
       if (user) {
-        await historyService.saveAnalysis(user.uid, result, context.role, context.companyName);
+        const newAnalysisId = await historyService.saveAnalysis(
+          user.uid, 
+          result, 
+          context.role, 
+          context.companyName,
+          profile.fullName,
+          profile.experienceYears,
+          modelUsed,
+          cost
+        );
+        setCurrentAnalysisId(newAnalysisId);
+        setCurrentAnalysisHasFeedback(false);
+        
         // Refresh history
         const updatedHistory = await historyService.getUserHistory(user.uid);
         setHistory(updatedHistory);
+      } else {
+        setCurrentAnalysisId(undefined);
+        setCurrentAnalysisHasFeedback(false);
       }
 
       setCurrentStep(AppStep.RESULTS);
@@ -339,20 +365,30 @@ const App: React.FC = () => {
       companyName: item.companyName,
       modelSpeed: 'balanced' // Default
     });
-    // We might not have the full profile object if we didn't save it, 
-    // but StepAnalysis mainly needs the result.
-    // However, StepAnalysis uses candidateName from profile.
-    // We can mock it or use user name.
-    if (!profile && user) {
-        setProfile({
-            fullName: user.name,
-            skills: [], // We don't have skills from history yet unless we save them
-            experienceYears: 0
-        });
-    }
     
+    // Set profile from history item if available, otherwise fallback to user data
+    setProfile({
+        fullName: item.candidateName || user?.name,
+        skills: [], // We don't have skills from history yet unless we save them
+        experienceYears: item.experienceYears !== undefined ? item.experienceYears : 0,
+        summary: ''
+    });
+    
+    setCurrentAnalysisId(item.id);
+    setCurrentAnalysisHasFeedback(!!item.feedback);
     setCurrentStep(AppStep.RESULTS);
     navigate('/app');
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (user) {
+      // Refresh history to include the new feedback
+      const updatedHistory = await historyService.getUserHistory(user.uid);
+      setHistory(updatedHistory);
+      // Note: We intentionally do NOT set currentAnalysisHasFeedback(true) here
+      // so that the "Thank You" message remains visible for the current session.
+      // It will be hidden next time the user views this analysis from history.
+    }
   };
 
   const handleDeleteHistory = async (itemId: string) => {
@@ -397,10 +433,24 @@ const App: React.FC = () => {
 
       setUser(prev => prev ? { ...prev, onboardingCompleted: true, name: data.name || prev.name } : null);
       setIsOnboardingModalOpen(false);
-      setNotification({ message: "Profile setup complete! You earned 10 credits.", type: 'success' });
+      setNotification({ message: "Profile setup complete!", type: 'success' });
     } catch (error) {
       console.error("Onboarding error:", error);
       setNotification({ message: "Failed to save profile.", type: 'error' });
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setIsResendingVerification(true);
+    setResendVerificationMessage(null);
+    try {
+      await authService.resendInitialVerificationEmail();
+      setResendVerificationMessage({ text: 'Verification email resent successfully!', type: 'success' });
+      setTimeout(() => setResendVerificationMessage(null), 5000);
+    } catch (error: any) {
+      setResendVerificationMessage({ text: error.message || 'Failed to resend email.', type: 'error' });
+    } finally {
+      setIsResendingVerification(false);
     }
   };
 
@@ -435,47 +485,6 @@ const App: React.FC = () => {
             onPurchaseSuccess={handlePurchaseSuccess}
           />
         </>
-      )}
-
-      {/* Verification Banner */}
-      {user && user.emailVerified === false && (
-        <div className="bg-amber-500 dark:bg-amber-600 text-white px-4 py-2 text-center text-sm font-medium shadow-md flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
-          <AlertCircle className="w-4 h-4" />
-          <span>Please verify your email address to receive your 10 free credits. Check your inbox (and spam folder).</span>
-        </div>
-      )}
-
-      {/* Verification Success Popup */}
-      {showVerificationAlert && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Email Verified!</p>
-            <p className="text-emerald-50 text-sm">You have received 10 free credits.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Email Change Success Popup */}
-      {emailChangeNotification && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Email Changed!</p>
-            <p className="text-emerald-50 text-sm">Email Changed from {emailChangeNotification.old} to {emailChangeNotification.new}!</p>
-          </div>
-        </div>
-      )}
-
-      {/* Name Change Success Popup */}
-      {nameChangeNotification && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Name Changed!</p>
-            <p className="text-emerald-50 text-sm">Name Changed from {nameChangeNotification.old} to {nameChangeNotification.new}!</p>
-          </div>
-        </div>
       )}
 
       {/* Navbar */}
@@ -522,6 +531,11 @@ const App: React.FC = () => {
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{user.name}</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pro Member</span>
+                  {user.lastVisited && (
+                    <span className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      Last Visited: {new Date(user.lastVisited).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
                 <button 
                   onClick={() => setIsProfileEditModalOpen(!isProfileEditModalOpen)}
@@ -670,9 +684,14 @@ const App: React.FC = () => {
         {currentStep === AppStep.RESULTS && analysisResult && (
           <StepAnalysis 
             result={analysisResult} 
-            candidateName={profile?.fullName}
+            candidateName={profile?.fullName || user?.name}
             experienceYears={profile?.experienceYears}
             onReset={handleReset} 
+            analysisId={currentAnalysisId}
+            hasFeedback={currentAnalysisHasFeedback}
+            onFeedbackSubmit={handleFeedbackSubmit}
+            modelUsed={jobContext?.modelSpeed === 'fastest' ? 'Gemini Flash Lite' : jobContext?.modelSpeed === 'balanced' ? 'Gemini 3.0 Flash' : 'Gemini 3.0 Pro'}
+            cost={jobContext?.modelSpeed === 'fastest' ? 2 : jobContext?.modelSpeed === 'balanced' ? 3 : 5}
           />
         )}
 
@@ -686,14 +705,88 @@ const App: React.FC = () => {
     </div>
   );
 
+  const handleNewAnalysis = () => {
+    handleReset();
+    navigate('/app');
+  };
+
   return (
-    <Routes>
-      <Route 
-        path="/" 
-        element={
+    <>
+      {/* Global Banners and Popups */}
+      {user && user.emailVerified === false && (
+        <div className="bg-amber-500 dark:bg-amber-600 text-white px-4 py-2 text-center text-sm font-medium shadow-md flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 animate-in slide-in-from-top-2 z-50 relative">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            <span>Please verify your email address to receive your 10 free credits. Check your inbox (and spam folder).</span>
+          </div>
+          <button 
+            onClick={handleResendVerification}
+            disabled={isResendingVerification}
+            className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            {isResendingVerification ? (
+              <><Loader2 className="w-3 h-3 animate-spin" /> Sending...</>
+            ) : (
+              'Resend Email'
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Resend Verification Message */}
+      {resendVerificationMessage && (
+        <div className={`fixed top-16 right-4 z-50 px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border ${
+          resendVerificationMessage.type === 'success' 
+            ? 'bg-emerald-500 text-white border-emerald-400' 
+            : 'bg-red-500 text-white border-red-400'
+        }`}>
+          {resendVerificationMessage.type === 'success' ? <CheckCircle className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+          <div>
+            <p className="font-bold text-sm leading-tight">{resendVerificationMessage.text}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Success Popup */}
+      {showVerificationAlert && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
+          <CheckCircle className="w-6 h-6" />
+          <div>
+            <p className="font-bold text-lg leading-tight">Email Verified!</p>
+            <p className="text-emerald-50 text-sm">You have received 10 free credits.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Email Change Success Popup */}
+      {emailChangeNotification && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
+          <CheckCircle className="w-6 h-6" />
+          <div>
+            <p className="font-bold text-lg leading-tight">Email Changed!</p>
+            <p className="text-emerald-50 text-sm">Email Changed from {emailChangeNotification.old} to {emailChangeNotification.new}!</p>
+          </div>
+        </div>
+      )}
+
+      {/* Name Change Success Popup */}
+      {nameChangeNotification && (
+        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
+          <CheckCircle className="w-6 h-6" />
+          <div>
+            <p className="font-bold text-lg leading-tight">Name Changed!</p>
+            <p className="text-emerald-50 text-sm">Name Changed from {nameChangeNotification.old} to {nameChangeNotification.new}!</p>
+          </div>
+        </div>
+      )}
+
+      <Routes>
+        <Route 
+          path="/" 
+          element={
           <>
             <LandingPage 
-              onTryDemo={() => navigate('/app')} 
+              onTryDemo={handleNewAnalysis} 
               onLoginClick={() => {
                 setAuthModalInitialView('login');
                 setIsAuthModalOpen(true);
@@ -758,6 +851,7 @@ const App: React.FC = () => {
       <Route path="/app/*" element={mainAppContent} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 };
 
