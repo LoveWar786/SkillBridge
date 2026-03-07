@@ -211,10 +211,10 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
                             onChange={(e) => handleSkillChange(idx, 'category', e.target.value)}
                             className="w-full text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 focus:border-blue-500 outline-none"
                         >
-                            <option value="Technical">Technical</option>
-                            <option value="Soft">Soft</option>
-                            <option value="Tool">Tool</option>
-                            <option value="Domain">Domain</option>
+                            <option value="Technical" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">Technical</option>
+                            <option value="Soft" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">Soft</option>
+                            <option value="Tool" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">Tool</option>
+                            <option value="Domain" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">Domain</option>
                         </select>
                     </div>
 
@@ -230,9 +230,9 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
                                 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                             }`}
                         >
-                            <option value={SkillLevel.BEGINNER}>Beginner</option>
-                            <option value={SkillLevel.INTERMEDIATE}>Intermediate</option>
-                            <option value={SkillLevel.ADVANCED}>Advanced</option>
+                            <option value={SkillLevel.BEGINNER} className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300">Beginner</option>
+                            <option value={SkillLevel.INTERMEDIATE} className="bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400">Intermediate</option>
+                            <option value={SkillLevel.ADVANCED} className="bg-white dark:bg-slate-900 text-green-600 dark:text-green-400">Advanced</option>
                         </select>
                     </div>
 

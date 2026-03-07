@@ -284,16 +284,40 @@ export const analyzeJobReadiness = async (
  */
 export const sendChatMessage = async (
   history: { role: string, content: string }[],
-  newMessage: string
+  newMessage: string,
+  attachment?: { type: 'image' | 'file', preview: string, name: string }
 ) => {
-  const model = "gemini-flash-lite-latest";
+  const model = "gemini-3-flash-preview";
   const context = history.map(h => `${h.role}: ${h.content}`).join('\n');
-  const fullPrompt = `Context: ${context}\nUser: ${newMessage}\nProvide concise career advice. Use Markdown for bolding key terms. Use Search Grounding.`;
+  
+  const parts: any[] = [{ text: `Context: ${context}\nUser: ${newMessage}\nProvide concise career advice. Use Markdown for bolding key terms. Use Search Grounding.` }];
+
+  if (attachment) {
+      const base64Data = attachment.preview.split(',')[1];
+      const mimeType = attachment.preview.split(';')[0].split(':')[1];
+      
+      if (attachment.name.toLowerCase().endsWith('.docx')) {
+         try {
+             const binaryString = atob(base64Data);
+             const bytes = new Uint8Array(binaryString.length);
+             for (let i = 0; i < binaryString.length; i++) {
+                 bytes[i] = binaryString.charCodeAt(i);
+             }
+             const text = await extractTextFromDocx(bytes.buffer);
+             parts[0].text += `\n\nAttached Document Content:\n${text}`;
+         } catch (e) {
+             console.error("Failed to parse docx", e);
+             parts[0].text += `\n\n[User attached a document but it could not be read]`;
+         }
+      } else {
+         parts.push({ inlineData: { mimeType, data: base64Data } });
+      }
+  }
 
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: fullPrompt,
+      contents: { parts },
       config: { tools: [{ googleSearch: {} }] }
     });
     const text = response.text || "I couldn't generate a response.";
