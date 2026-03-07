@@ -4,12 +4,19 @@ import { RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer } from '
 import { AlertTriangle, BookOpen, Briefcase, ArrowRight, BrainCircuit, Volume2, StopCircle, Loader2, Clock, Lightbulb, Download, ChevronDown, User, Star } from 'lucide-react';
 import { generateSpeech, decodeAudioData, base64ToArrayBuffer } from '../services/geminiService';
 import { jsPDF } from "jspdf";
+import ErrorMessage from './ErrorMessage';
+import FeedbackWidget from './FeedbackWidget';
 
 interface StepAnalysisProps {
   result: AnalysisResult;
   candidateName?: string;
   experienceYears?: number;
   onReset: () => void;
+  analysisId?: string;
+  hasFeedback?: boolean;
+  onFeedbackSubmit?: () => void;
+  modelUsed?: string;
+  cost?: number;
 }
 
 const LearningStepItem: React.FC<{ step: LearningStep; index: number }> = ({ step, index }) => {
@@ -66,9 +73,10 @@ const LearningStepItem: React.FC<{ step: LearningStep; index: number }> = ({ ste
   );
 };
 
-const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, experienceYears, onReset }) => {
+const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, experienceYears, onReset, analysisId, hasFeedback, onFeedbackSubmit, modelUsed, cost }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Refs for audio management
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -194,11 +202,13 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         }, totalDurationMs + 500);
       } else {
         setIsLoadingAudio(false);
+        setError("Failed to load audio. Please try again.");
       }
     } catch (e) {
       console.error("Failed to play audio summary", e);
       setIsLoadingAudio(false);
       setIsPlaying(false);
+      setError("An error occurred while generating audio.");
     }
   };
 
@@ -235,17 +245,18 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
 
   // --- High Quality PDF Generation ---
   const handleSavePDF = async () => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 15;
-    let yPos = 20;
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPos = 20;
 
-    // Fetch Icons
-    const brainIcon = await getIconPng('pdf-icon-brain');
-    const alertIcon = await getIconPng('pdf-icon-alert');
-    const bookIcon = await getIconPng('pdf-icon-book');
-    const briefcaseIcon = await getIconPng('pdf-icon-briefcase');
+      // Fetch Icons
+      const brainIcon = await getIconPng('pdf-icon-brain');
+      const alertIcon = await getIconPng('pdf-icon-alert');
+      const bookIcon = await getIconPng('pdf-icon-book');
+      const briefcaseIcon = await getIconPng('pdf-icon-briefcase');
 
     // Detect Dark Mode
     const isDarkMode = document.documentElement.classList.contains('dark');
@@ -677,6 +688,10 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
 
     const filename = `SkillBridge Analysis ${candidateName || 'User'}.pdf`;
     doc.save(filename);
+    } catch (err) {
+      console.error("Failed to generate PDF:", err);
+      setError("Failed to generate PDF. Please try again.");
+    }
   };
 
   // Cleanup on unmount
@@ -698,6 +713,17 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         <BookOpen id="pdf-icon-book" color="#3b82f6" size={24} />
         <Briefcase id="pdf-icon-briefcase" color="#60a5fa" size={24} />
       </div>
+
+      {error && (
+        <div className="mb-8">
+          <ErrorMessage 
+            title="Analysis Error"
+            message={error}
+            variant="error"
+            onClose={() => setError(null)}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row gap-8 items-start">
         <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 flex-shrink-0 w-full md:w-80 flex flex-col items-center justify-center text-center">
@@ -733,6 +759,24 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
                 </div>
             </div>
             <p className="text-xs text-slate-400 mt-4">AI Confidence: High</p>
+            
+            {/* Model Info */}
+            {(modelUsed || cost) && (
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 w-full">
+                    {modelUsed && (
+                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                            <span>Model:</span>
+                            <span className="font-mono">{modelUsed}</span>
+                        </div>
+                    )}
+                    {cost !== undefined && (
+                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                            <span>Est. Cost:</span>
+                            <span className="font-mono">{cost} credits</span>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
 
         <div className="flex-grow bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
@@ -835,6 +879,13 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
                 ))}
             </div>
          </div>
+      )}
+
+      {/* Feedback Section */}
+      {!hasFeedback && (
+        <div className="max-w-2xl mx-auto mt-12 mb-8">
+          <FeedbackWidget analysisId={analysisId} onFeedbackSubmit={onFeedbackSubmit} />
+        </div>
       )}
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8 border-t border-slate-200 dark:border-slate-800">

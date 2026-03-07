@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, ChevronRight } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, ChevronRight, Trash2, AlertTriangle } from 'lucide-react';
 import { authService, User as UserType } from '../services/authService';
+import ErrorMessage from './ErrorMessage';
+import { useNavigate } from 'react-router-dom';
 
-type TabType = 'account' | 'security' | 'purchases';
+type TabType = 'account' | 'security' | 'purchases' | 'danger';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -23,6 +25,10 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('account');
+  const [isCancellingEmail, setIsCancellingEmail] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (isOpen) {
@@ -35,6 +41,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
       setSuccess('');
       setResendSuccess('');
       setActiveTab('account');
+      setDeleteConfirmation('');
     }
   }, [isOpen]); // Only reset on open
 
@@ -67,6 +74,48 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
       setError(err.message || 'Failed to resend verification email');
     } finally {
       setIsResending(false);
+    }
+  };
+
+  const handleCancelEmailChange = async () => {
+    if (!currentUser.pendingEmail) return;
+    setIsCancellingEmail(true);
+    setError('');
+    try {
+      await authService.cancelEmailChange(currentUser.uid);
+      setSuccess('Email change request cancelled.');
+      // Update local user state via parent callback
+      const updatedUser = { ...currentUser, pendingEmail: null };
+      onUpdateSuccess(updatedUser as UserType);
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel email change');
+    } finally {
+      setIsCancellingEmail(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') {
+      setError('Please type DELETE to confirm account deletion.');
+      return;
+    }
+    
+    if (!currentPassword) {
+      setError('Please enter your password to confirm account deletion.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setError('');
+    try {
+      await authService.deleteAccount(currentUser.uid, currentPassword);
+      // Redirect to home or login after deletion
+      onClose();
+      navigate('/');
+      window.location.reload(); // Force reload to clear any auth state
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete account. Please try again.');
+      setIsDeleting(false);
     }
   };
 
@@ -160,6 +209,19 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
               <Receipt className="w-5 h-5" />
               Purchase History
             </button>
+            <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => setActiveTab('danger')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                  activeTab === 'danger' 
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' 
+                    : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                }`}
+              >
+                <Trash2 className="w-5 h-5" />
+                Danger Zone
+              </button>
+            </div>
           </nav>
         </div>
 
@@ -167,9 +229,13 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
         <div className="flex-1 flex flex-col overflow-hidden relative">
           <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar pt-14 md:pt-8">
             {error && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3 text-red-600 dark:text-red-400 text-sm">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                {error}
+              <div className="mb-6">
+                <ErrorMessage 
+                  title="Profile Update Error"
+                  message={error}
+                  variant="error"
+                  onClose={() => setError('')}
+                />
               </div>
             )}
 
@@ -223,7 +289,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
                             An email change to <span className="font-bold">{currentUser.pendingEmail}</span> is pending. 
                             Please check your inbox and verify the new email address to complete the update.
                           </p>
-                          <div className="mt-4 flex items-center justify-between">
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
                             <button
                               type="button"
                               onClick={handleResendVerification}
@@ -238,6 +304,14 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
                               ) : (
                                 'Resend Verification Email'
                               )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleCancelEmailChange}
+                              disabled={isCancellingEmail}
+                              className="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 px-2 py-2 transition-colors disabled:opacity-50"
+                            >
+                              {isCancellingEmail ? 'Cancelling...' : 'Cancel Change'}
                             </button>
                             {resendSuccess && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{resendSuccess}</span>}
                           </div>
@@ -396,6 +470,83 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+            {activeTab === 'danger' && (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-red-600 dark:text-red-500">Danger Zone</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Irreversible actions for your account.</p>
+                </div>
+
+                <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-2xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full text-red-600 dark:text-red-400">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-red-700 dark:text-red-400">Delete Account</h4>
+                      <p className="text-sm text-red-600/80 dark:text-red-300/80 mt-2 leading-relaxed">
+                        This action is permanent and cannot be undone. It will delete your:
+                      </p>
+                      <ul className="list-disc list-inside text-sm text-red-600/80 dark:text-red-300/80 mt-2 space-y-1 ml-1">
+                        <li>User profile and settings</li>
+                        <li>All analysis history and reports</li>
+                        <li>Purchase history and credits</li>
+                        <li>Feedback and saved data</li>
+                      </ul>
+                      
+                      <div className="mt-6 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-red-700 dark:text-red-300 mb-2">
+                            Enter your password to confirm
+                          </label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-3 w-5 h-5 text-red-300" />
+                            <input
+                              type="password"
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              className="w-full pl-10 p-3 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-red-900 dark:text-red-100 placeholder:text-red-300"
+                              placeholder="Your password"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-red-700 dark:text-red-300 mb-2">
+                            Type <span className="font-mono font-bold">DELETE</span> to confirm
+                          </label>
+                          <input
+                            type="text"
+                            value={deleteConfirmation}
+                            onChange={(e) => setDeleteConfirmation(e.target.value)}
+                            className="w-full p-3 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-red-900 dark:text-red-100 placeholder:text-red-300"
+                            placeholder="DELETE"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={deleteConfirmation !== 'DELETE' || !currentPassword || isDeleting}
+                        className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 dark:shadow-red-900/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {isDeleting ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Deleting Account...
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 className="w-5 h-5" />
+                            Delete My Account Permanently
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
