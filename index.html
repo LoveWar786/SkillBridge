@@ -28,7 +28,42 @@
       ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
       .dark ::-webkit-scrollbar-thumb { background: #334155; }
       ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+      @keyframes blob {
+        0% { transform: translate(0px, 0px) scale(1); }
+        33% { transform: translate(30px, -50px) scale(1.1); }
+        66% { transform: translate(-20px, 20px) scale(0.9); }
+        100% { transform: translate(0px, 0px) scale(1); }
+      }
+      .animate-blob {
+        animation: blob 7s infinite;
+      }
+      .animation-delay-2000 {
+        animation-delay: 2s;
+      }
+      .animation-delay-4000 {
+        animation-delay: 4s;
+      }
     </style>
+    <script>
+      // Suppress Vite WebSocket errors in the console
+      const originalError = console.error;
+      console.error = (...args) => {
+        if (args[0] && typeof args[0] === 'string' && (args[0].includes('[vite] failed to connect to websocket') || args[0].includes('WebSocket'))) {
+          return;
+        }
+        originalError.apply(console, args);
+      };
+      
+      window.addEventListener('unhandledrejection', (event) => {
+        if (event.reason && (
+          (event.reason.message && event.reason.message.includes('WebSocket')) ||
+          (typeof event.reason === 'string' && event.reason.includes('WebSocket'))
+        )) {
+          event.preventDefault();
+        }
+      });
+    </script>
   <script type="importmap">
 {
   "imports": {
