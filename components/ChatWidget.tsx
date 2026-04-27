@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+import ErrorMessage from './ErrorMessage';
 import { sendChatMessage, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
@@ -27,6 +28,8 @@ const ChatWidget: React.FC = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [attachment, setAttachment] = useState<{ type: 'image' | 'file', preview: string, name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Voice Mode State
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -59,22 +62,25 @@ const ChatWidget: React.FC = () => {
   }, []);
 
   const handleSend = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if ((!inputValue.trim() && !attachment) || isLoading) return;
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue
+      content: inputValue,
+      attachment: attachment ? { name: attachment.name, preview: attachment.preview, type: attachment.type } : undefined
     };
 
     setMessages(prev => [...prev, userMsg]);
     setInputValue('');
+    const currentAttachment = attachment;
+    setAttachment(null);
     setIsLoading(true);
 
     const history = messages.map(m => ({ role: m.role, content: m.content }));
     
     try {
-      const response = await sendChatMessage(history, userMsg.content);
+      const response = await sendChatMessage(history, userMsg.content, currentAttachment || undefined);
       
       const botMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -90,6 +96,23 @@ const ChatWidget: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const isImage = file.type.startsWith('image/');
+      setAttachment({
+        type: isImage ? 'image' : 'file',
+        preview: reader.result as string,
+        name: file.name
+      });
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDownloadChat = () => {
@@ -158,20 +181,24 @@ const ChatWidget: React.FC = () => {
         await window.aistudio.openSelectKey();
         setKeySelectionRequired(false);
         setLiveError(null);
-        connectLiveSession(); // Automatically proceed after selection attempt
+        connectLiveSession(true); // Automatically proceed after selection attempt
       }
     } catch (e) {
       console.error("Failed to open key selection", e);
     }
   };
 
-  const connectLiveSession = async () => {
+  const connectLiveSession = async (skipKeyCheck: boolean | React.MouseEvent = false) => {
+    const shouldSkip = typeof skipKeyCheck === 'boolean' ? skipKeyCheck : false;
+
     try {
       setLiveError(null);
       setIsLoading(true);
 
       // Rule: Verify API key selection for premium models
-      if (window.aistudio?.hasSelectedApiKey) {
+      // User requested to bypass paid key check
+      /*
+      if (!shouldSkip && window.aistudio?.hasSelectedApiKey) {
         const hasKey = await window.aistudio.hasSelectedApiKey();
         if (!hasKey) {
           setKeySelectionRequired(true);
@@ -179,9 +206,11 @@ const ChatWidget: React.FC = () => {
           return;
         }
       }
+      */
 
       // Create new client instance right before connection as per instructions
-      const client = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Using GEMINI_API_KEY to ensure we use the environment key if available (free tier support)
+      const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
       
       // Initialize Contexts
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -190,7 +219,7 @@ const ChatWidget: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       const sessionPromise = client.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -277,9 +306,9 @@ const ChatWidget: React.FC = () => {
              console.error("Live API Error", err);
              // Handle generic Network Error or specific missing entity
              const errorMessage = err?.message || "Connection failed. Please check your internet or API project status.";
-             if (errorMessage.includes("Requested entity was not found")) {
-                 setKeySelectionRequired(true);
-             }
+             // if (errorMessage.includes("Requested entity was not found")) {
+             //     setKeySelectionRequired(true);
+             // }
              setLiveError(errorMessage);
              setIsLiveConnected(false);
              setIsLoading(false);
@@ -327,7 +356,7 @@ const ChatWidget: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-none">
+    <div className="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end pointer-events-none">
       
       {isOpen && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] border border-slate-200 dark:border-slate-800 mb-4 flex flex-col pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 overflow-hidden">
@@ -407,15 +436,19 @@ const ChatWidget: React.FC = () => {
                            </a>
                         </div>
                       ) : liveError ? (
-                        <div className="space-y-4">
-                           <p className="text-red-400 text-sm font-medium">{liveError}</p>
-                           <button 
-                             onClick={connectLiveSession}
-                             className="text-blue-400 hover:underline text-sm font-bold"
-                           >
-                             Try Connecting Again
-                           </button>
-                        </div>
+                        <ErrorMessage 
+                          title="Connection Error"
+                          message={liveError}
+                          variant="error"
+                          onRetry={connectLiveSession}
+                          onClose={() => setLiveError(null)}
+                          solutions={[
+                            "Check your internet connection",
+                            "Ensure microphone permissions are granted",
+                            "Try refreshing the page if the issue persists"
+                          ]}
+                          className="bg-red-900/20 border-red-800 text-red-200"
+                        />
                       ) : (
                         <>
                            <h3 className="text-white text-xl font-semibold mb-2">
@@ -459,6 +492,19 @@ const ChatWidget: React.FC = () => {
                           <SimpleMarkdown text={msg.content} />
                       </p>
                       
+                      {msg.attachment && (
+                        <div className={`mt-2 p-2 rounded-lg flex items-center gap-2 ${msg.role === 'user' ? 'bg-blue-700' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                          {msg.attachment.type === 'image' ? (
+                            <img src={msg.attachment.preview} alt="attachment" className="max-w-full h-auto max-h-32 rounded" />
+                          ) : (
+                            <>
+                              <FileText className="w-4 h-4 flex-shrink-0" />
+                              <span className="text-xs truncate">{msg.attachment.name}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {/* Source Grounding */}
                       {msg.sources && msg.sources.length > 0 && (
                         <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
@@ -497,7 +543,36 @@ const ChatWidget: React.FC = () => {
 
               {/* Text Input */}
               <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                {attachment && (
+                  <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {attachment.type === 'image' ? (
+                        <img src={attachment.preview} alt="preview" className="w-8 h-8 object-cover rounded" />
+                      ) : (
+                        <FileText className="w-6 h-6 text-blue-500 flex-shrink-0" />
+                      )}
+                      <span className="text-xs text-slate-700 dark:text-slate-300 truncate">{attachment.name}</span>
+                    </div>
+                    <button onClick={() => setAttachment(null)} className="p-1 text-slate-500 hover:text-red-500">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept=".pdf,.docx,image/*"
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                    title="Attach file"
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
                   <input
                     type="text"
                     value={inputValue}
@@ -508,7 +583,7 @@ const ChatWidget: React.FC = () => {
                   />
                   <button 
                     onClick={handleSend}
-                    disabled={!inputValue.trim() || isLoading}
+                    disabled={(!inputValue.trim() && !attachment) || isLoading}
                     className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Send className="w-4 h-4" />

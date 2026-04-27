@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { JobContext } from '../types';
-import { Building2, Globe, ArrowRight, Zap, Brain, Rocket, Info, ChevronDown } from 'lucide-react';
+import { Building2, Globe, ArrowRight, Zap, Brain, Rocket, Info, ChevronDown, Coins } from 'lucide-react';
 
 interface StepJobProps {
   onAnalyze: (jobContext: JobContext) => void;
   onBack: () => void;
+  credits: number;
+  onBuyCredits: () => void;
+  isGuest: boolean;
 }
 
 const COMMON_ROLES = [
@@ -28,7 +31,7 @@ const COMMON_ROLES = [
   "Human Resources Manager"
 ];
 
-const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack }) => {
+const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCredits, isGuest }) => {
   const [role, setRole] = useState('');
   const [isCustomRole, setIsCustomRole] = useState(false);
   const [type, setType] = useState<'Generalized' | 'CompanySpecific'>('Generalized');
@@ -75,6 +78,17 @@ Requirements:
 - Experience with accessibility (WCAG) and responsive design.`);
     setType('CompanySpecific');
   };
+
+  const getCost = (speed: 'fastest' | 'balanced' | 'deep') => {
+    switch (speed) {
+      case 'fastest': return 2;
+      case 'balanced': return 3;
+      case 'deep': return 5;
+    }
+  };
+
+  const ANALYSIS_COST = getCost(modelSpeed);
+  const hasEnoughCredits = credits >= ANALYSIS_COST;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-fade-in pb-12">
@@ -219,6 +233,9 @@ Requirements:
                     </div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Fastest</span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">Gemini Flash Lite</span>
+                    <span className="mt-2 text-xs font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Coins className="w-3 h-3" /> 2
+                    </span>
                 </button>
 
                 <button
@@ -235,6 +252,9 @@ Requirements:
                     </div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Balanced</span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">Gemini 3.0 Flash</span>
+                    <span className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Coins className="w-3 h-3" /> 3
+                    </span>
                 </button>
 
                 <button
@@ -251,26 +271,58 @@ Requirements:
                     </div>
                     <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Deep Reasoning</span>
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">Gemini 3.0 Pro + Thinking</span>
+                    <span className="mt-2 text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Coins className="w-3 h-3" /> 5
+                    </span>
                 </button>
             </div>
         </div>
 
-        <div className="pt-4 flex justify-between items-center">
-            <button 
-                type="button" 
-                onClick={onBack}
-                className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium px-4"
-            >
-                Back
-            </button>
-            <button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 flex items-center gap-2 transition-all hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!role || (type === 'CompanySpecific' && !description)}
-            >
-                Start Analysis
-                <ArrowRight className="w-5 h-5" />
-            </button>
+        <div className="pt-4 flex flex-col gap-4">
+            {!hasEnoughCredits && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-lg flex items-center justify-between gap-3 text-red-700 dark:text-red-300">
+                <div className="flex items-center gap-3">
+                  <Coins className="w-5 h-5" />
+                  <span className="text-sm font-medium">Insufficient credits. You need {ANALYSIS_COST} credits but only have {credits}.</span>
+                </div>
+                {!isGuest && (
+                  <button
+                    type="button"
+                    onClick={onBuyCredits}
+                    className="text-xs font-bold bg-red-100 dark:bg-red-800/50 hover:bg-red-200 dark:hover:bg-red-800 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Buy Credits
+                  </button>
+                )}
+              </div>
+            )}
+            
+            <div className="flex justify-between items-center">
+              <button 
+                  type="button" 
+                  onClick={onBack}
+                  className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium px-4"
+              >
+                  Back
+              </button>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 flex items-center gap-2 transition-all hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!role || (type === 'CompanySpecific' && !description) || !hasEnoughCredits}
+                >
+                    <span>Start Analysis</span>
+                    <span className="bg-blue-500/50 px-2 py-0.5 rounded text-xs flex items-center gap-1">
+                      <Coins className="w-3 h-3" />
+                      {ANALYSIS_COST}
+                    </span>
+                    <ArrowRight className="w-5 h-5" />
+                </button>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                  * Cost depends on selected model
+                </p>
+              </div>
+            </div>
         </div>
       </form>
     </div>

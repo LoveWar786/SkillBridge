@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Loader2, ArrowRight, PenTool, Type } from 'lucide-react';
+import ErrorMessage from './ErrorMessage';
 import { parseCV, extractTextFromDocx } from '../services/geminiService';
 import { UserProfile } from '../types';
 
@@ -217,9 +218,18 @@ const StepUpload: React.FC<StepUploadProps> = ({ onProfileLoaded }) => {
         )}
         
         {error && (
-          <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm rounded-lg border border-red-100 dark:border-red-900/50 flex items-start gap-2">
-            <div className="mt-0.5">⚠️</div>
-            <div className="text-left font-medium">{error}</div>
+          <div className="mt-6 text-left">
+            <ErrorMessage 
+              title="Upload Error"
+              message={error}
+              variant="error"
+              onClose={() => setError(null)}
+              solutions={[
+                "Ensure the file is a valid PDF, DOCX, or Image",
+                "Check if the file is corrupted",
+                "Try copy-pasting the text manually"
+              ]}
+            />
           </div>
         )}
       </div>
