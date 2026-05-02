@@ -91,6 +91,11 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-bold text-slate-900 dark:text-white">{user.name}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{user.credits} Credits</p>
+                {user.lastLogin && (
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                    Last Login: {new Date(user.lastLogin).toLocaleDateString()}
+                  </p>
+                )}
               </div>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg">
                 {user.name.charAt(0).toUpperCase()}

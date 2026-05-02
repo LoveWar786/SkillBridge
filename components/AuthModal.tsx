@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, User, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { authService } from '../services/authService';
+import ErrorMessage from './ErrorMessage';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -37,9 +38,6 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
     setIsLoading(true);
 
     try {
-      // Simulate network delay for realism
-      await new Promise(resolve => setTimeout(resolve, 800));
-
       if (view === 'forgot-password') {
         await authService.resetPassword(email);
         setSuccess('Password reset email sent! Check your inbox.');
@@ -160,9 +158,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3 text-red-600 dark:text-red-400 text-sm">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            {error}
+          <div className="mb-6">
+            <ErrorMessage 
+              title="Authentication Error"
+              message={error}
+              variant="error"
+              onClose={() => setError('')}
+            />
           </div>
         )}
 

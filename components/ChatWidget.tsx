@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import ErrorMessage from './ErrorMessage';
 import { sendChatMessage, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
 import { ChatMessage } from '../types';
@@ -18,6 +18,42 @@ const SimpleMarkdown = ({ text }: { text: string }) => {
         return part;
       })}
     </span>
+  );
+};
+
+const SourceList = ({ sources }: { sources: Array<{ title: string; uri: string }> }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!sources || sources.length === 0) return null;
+
+  return (
+    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 hover:text-slate-700 dark:hover:text-slate-200 transition-colors w-full"
+      >
+        <Search className="w-3 h-3" />
+        <span>Sources ({sources.length})</span>
+        {isExpanded ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+      </button>
+      
+      {isExpanded && (
+        <div className="flex flex-col gap-1 mt-1 animate-in slide-in-from-top-1 duration-200">
+          {sources.map((source, idx) => (
+            <a 
+              key={idx} 
+              href={source.uri} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-blue-500 dark:text-blue-400 hover:underline truncate"
+            >
+              <LinkIcon className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{source.title}</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -118,62 +154,174 @@ const ChatWidget: React.FC = () => {
   const handleDownloadChat = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    const margin = 15;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
     let yPos = 20;
 
-    // Stylish Header
-    doc.setFillColor(37, 99, 235); // Blue
-    doc.rect(0, 0, pageWidth, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
+    // --- Helpers ---
+    const drawZapIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+        doc.setFillColor(color[0], color[1], color[2]);
+        const s = size / 24;
+        // Lucide Zap: 13,2 13,10 19,10 11,22 11,14 5,14
+        // Split into triangles for PDF
+        // Top part
+        doc.triangle(x + 13*s, y + 2*s, x + 13*s, y + 10*s, x + 5*s, y + 14*s, 'F');
+        // Bottom part
+        doc.triangle(x + 13*s, y + 10*s, x + 19*s, y + 10*s, x + 11*s, y + 22*s, 'F');
+        // Middle overlap fix (optional, but keeps shape clean)
+        doc.triangle(x + 13*s, y + 10*s, x + 5*s, y + 14*s, x + 11*s, y + 14*s, 'F'); 
+    };
+
+    // --- Dark Theme Setup ---
+    const bgR = 15, bgG = 23, bgB = 42; // Slate 900
+    const textR = 255, textG = 255, textB = 255; // White
+    
+    // Fill Page Background
+    doc.setFillColor(bgR, bgG, bgB);
+    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+
+    // --- Header ---
+    // Logo
+    drawZapIcon(margin, 15, 20, [59, 130, 246]); // Blue 500
+
+    // App Name
+    doc.setTextColor(textR, textG, textB);
+    doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
-    doc.text("Career Assistant Chat History", margin, 20);
-    doc.setFontSize(10);
+    doc.text("SkillBridge", margin + 25, 28);
+
+    // Subtitle
+    doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text(`Saved on ${new Date().toLocaleDateString()}`, margin, 30);
-    yPos = 55;
+    doc.setTextColor(148, 163, 184); // Slate 400
+    doc.text("Career Chat History", margin + 25, 36);
+
+    // Date (Right Aligned)
+    doc.setFontSize(10);
+    doc.text(new Date().toLocaleDateString(), pageWidth - margin, 28, { align: 'right' });
+    
+    // Divider
+    doc.setDrawColor(51, 65, 85); // Slate 700
+    doc.setLineWidth(0.5);
+    doc.line(margin, 45, pageWidth - margin, 45);
+
+    yPos = 60;
 
     messages.forEach((msg) => {
-        // Check for new page
-        if (yPos > 270) {
-            doc.addPage();
-            yPos = 20;
-        }
-
         const isUser = msg.role === 'user';
-        const bubbleWidth = pageWidth - (margin * 2) - 20;
+        const bubbleMaxWidth = (pageWidth - (margin * 2)) * 0.75; // 75% width
         
-        doc.setFontSize(10);
-        doc.setFont("helvetica", isUser ? "bold" : "normal");
-        
-        const cleanContent = msg.content.replace(/\*\*/g, ''); // Remove asterisks for PDF
-        const lines = doc.splitTextToSize(cleanContent, bubbleWidth - 10);
-        const height = (lines.length * 5) + 15;
+        // Prepare Text
+        const cleanContent = msg.content.replace(/\*\*/g, '');
+        const lines = doc.splitTextToSize(cleanContent, bubbleMaxWidth - 10);
+        let contentHeight = (lines.length * 5) + 20; // + padding
 
-        // Draw Bubble
-        if (isUser) {
-            doc.setFillColor(37, 99, 235); // Blue for user
-            doc.roundedRect(pageWidth - margin - bubbleWidth, yPos, bubbleWidth, height, 3, 3, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.text(lines, pageWidth - margin - bubbleWidth + 5, yPos + 10);
-            doc.text("You", pageWidth - margin - bubbleWidth + 5, yPos + 6);
-        } else {
-            doc.setFillColor(241, 245, 249); // Slate for bot
-            doc.roundedRect(margin, yPos, bubbleWidth, height, 3, 3, 'F');
-            doc.setTextColor(30, 41, 59);
-            doc.text(lines, margin + 5, yPos + 10);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(59, 130, 246);
-            doc.text("SkillBridge AI", margin + 5, yPos + 6);
+        // Calculate Sources Height
+        let sourcesHeight = 0;
+        if (msg.sources && msg.sources.length > 0) {
+            sourcesHeight = 10 + (msg.sources.length * 5); // Header + Divider + Items
+            contentHeight += sourcesHeight;
         }
 
-        yPos += height + 5;
+        // Check for new page
+        if (yPos + contentHeight > pageHeight - 20) {
+            doc.addPage();
+            doc.setFillColor(bgR, bgG, bgB);
+            doc.rect(0, 0, pageWidth, pageHeight, 'F'); // Re-fill background
+            yPos = 30;
+        }
+
+        // Calculate X Position
+        // User = Right aligned
+        // AI = Left aligned
+        const xPos = isUser ? (pageWidth - margin - bubbleMaxWidth) : margin;
+
+        // Draw Bubble Background
+        if (isUser) {
+            doc.setFillColor(37, 99, 235); // Blue 600
+            doc.setDrawColor(29, 78, 216); // Blue 700
+        } else {
+            doc.setFillColor(30, 41, 59); // Slate 800
+            doc.setDrawColor(51, 65, 85); // Slate 700
+        }
+        
+        // Rounded Rect with specific corners based on speaker
+        doc.roundedRect(xPos, yPos, bubbleMaxWidth, contentHeight, 3, 3, 'FD');
+
+        // Role Label
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold");
+        if (isUser) {
+            doc.setTextColor(191, 219, 254); // Blue 200
+            doc.text("ME", xPos + 5, yPos + 8);
+        } else {
+            doc.setTextColor(148, 163, 184); // Slate 400
+            doc.text("AI ASSISTANT", xPos + 5, yPos + 8);
+        }
+
+        // Content
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(255, 255, 255); // White text for both in dark mode
+        doc.text(lines, xPos + 5, yPos + 16);
+
+        // Sources (Expanded)
+        if (msg.sources && msg.sources.length > 0) {
+            let sourceY = yPos + 16 + (lines.length * 5) + 4;
+            
+            // Divider (Subtle line)
+            doc.setDrawColor(255, 255, 255); // White
+            doc.setLineWidth(0.1);
+            // Draw line with opacity simulation (thin line)
+            doc.line(xPos + 5, sourceY, xPos + bubbleMaxWidth - 5, sourceY);
+            
+            sourceY += 5;
+
+            // Header
+            doc.setFontSize(7);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(148, 163, 184); // Slate 400
+            doc.text("SOURCES:", xPos + 5, sourceY);
+            
+            sourceY += 4;
+
+            // List
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(96, 165, 250); // Blue 400 (Link color)
+            
+            msg.sources.forEach(source => {
+                const sourceTitle = `• ${source.title}`;
+                // Truncate if too long to fit in one line
+                // bubbleMaxWidth - 10 (padding)
+                // Approximate char width for helvetica 8 is ~3-4px
+                // Let's just use splitTextToSize to be safe, take first line
+                const truncatedTitle = doc.splitTextToSize(sourceTitle, bubbleMaxWidth - 10);
+                
+                // Add link annotation
+                doc.textWithLink(truncatedTitle[0], xPos + 5, sourceY, { url: source.uri });
+                sourceY += 5;
+            });
+        }
+
+        yPos += contentHeight + 8;
     });
 
-    doc.save("Career_Chat_History.pdf");
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105); // Slate 600
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+        doc.text("SkillBridge AI Career Assistant", margin, pageHeight - 10);
+    }
+
+    doc.save("SkillBridge_Chat_History.pdf");
   };
 
   // --- Live API Logic ---
+  // ... (rest of the component remains same)
 
   const handleSelectKey = async () => {
     try {
@@ -219,7 +367,7 @@ const ChatWidget: React.FC = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       const sessionPromise = client.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -366,7 +514,12 @@ const ChatWidget: React.FC = () => {
                 <div className="p-1.5 bg-white/20 rounded-lg">
                     {isVoiceMode ? <Headphones className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
                 </div>
-                <span className="font-bold">{isVoiceMode ? 'Live Career Talk' : 'Career Assistant'}</span>
+                <div className="flex flex-col">
+                    <span className="font-bold text-sm">{isVoiceMode ? 'Live Career Talk' : 'Career Assistant'}</span>
+                    <span className="text-[10px] text-blue-100 opacity-90 font-medium">
+                        {isVoiceMode ? 'Gemini 2.5 Flash Audio (12-2025)' : 'Gemini 3.0 Flash'}
+                    </span>
+                </div>
             </div>
             <div className="flex items-center gap-2">
                 <button 
@@ -507,26 +660,7 @@ const ChatWidget: React.FC = () => {
 
                       {/* Source Grounding */}
                       {msg.sources && msg.sources.length > 0 && (
-                        <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-                            <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
-                                <Search className="w-3 h-3" />
-                                <span>Sources</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                {msg.sources.map((source, idx) => (
-                                    <a 
-                                        key={idx} 
-                                        href={source.uri} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1 text-xs text-blue-500 dark:text-blue-400 hover:underline truncate"
-                                    >
-                                        <LinkIcon className="w-3 h-3 flex-shrink-0" />
-                                        <span className="truncate">{source.title}</span>
-                                    </a>
-                                ))}
-                            </div>
-                        </div>
+                        <SourceList sources={msg.sources} />
                       )}
                     </div>
                   </div>
