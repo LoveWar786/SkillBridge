@@ -29,14 +29,42 @@ export const extractTextFromDocx = async (arrayBuffer: ArrayBuffer): Promise<str
 };
 
 /**
+ * Utility for exponential backoff retries
+ */
+const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 2000
+): Promise<T> => {
+  let lastError: any;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      // Only retry on 429 (Rate Limit) or 5xx (Server Error)
+      const isRateLimit = error.message?.includes("429") || error.status === 429 || JSON.stringify(error).includes("429");
+      const isServerError = error.status >= 500 || JSON.stringify(error).includes("500");
+      
+      if (isRateLimit || isServerError) {
+        const delay = initialDelay * Math.pow(2, i);
+        console.warn(`API error (${isRateLimit ? 'Rate Limit' : 'Server Error'}). Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error; // Immediate fail for other errors (e.g. 400, 401, 403)
+    }
+  }
+  throw lastError;
+};
+
+/**
  * Parses a CV (text or image base64) to extract a structured profile.
- * Uses Flash (Standard) for better OCR and reasoning on layouts compared to Lite.
  */
 export const parseCV = async (
   fileData: string,
   mimeType: string
 ): Promise<UserProfile> => {
-  // Upgraded from 'gemini-flash-lite-latest' to 'gemini-flash-latest' for better robustness
   const model = "gemini-flash-latest";
   
   const prompt = `
@@ -84,34 +112,31 @@ export const parseCV = async (
   };
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await retryWithBackoff(() => ai.models.generateContent({
       model,
       contents: {
         parts: [
           { text: prompt },
-          { inlineData: { mimeType, data: fileData } } // fileData is base64
+          { inlineData: { mimeType, data: fileData } }
         ]
       },
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema
       }
-    });
+    }));
 
     if (!response.text) throw new Error("No response from AI");
     const parsed = JSON.parse(extractJSON(response.text));
 
-    // STRICT VALIDATION CHECK
     if (parsed.isValid === false) {
        throw new Error("INVALID_CONTENT");
     }
 
-    // Sanitization to prevent undefined access errors
     if (!parsed.skills || !Array.isArray(parsed.skills)) parsed.skills = [];
     if (!parsed.summary) parsed.summary = "";
     if (typeof parsed.experienceYears !== 'number') parsed.experienceYears = 0;
     
-    // Fallback check: even if marked valid, must have some data
     const hasSkills = parsed.skills.length > 0;
     const hasSummary = parsed.summary && parsed.summary.trim().length > 5;
 
@@ -122,10 +147,12 @@ export const parseCV = async (
     return parsed as UserProfile;
   } catch (error: any) {
     console.error("Error parsing CV:", error);
+    if (error.message?.includes("429") || JSON.stringify(error).includes("429")) {
+        throw new Error("The AI service is currently busy (Rate Limit Exceeded). Please wait a few seconds and try again.");
+    }
     if (error.message === "INVALID_CONTENT" || error.message.includes("INVALID_CONTENT")) {
         throw new Error("The uploaded file does not appear to be a valid Resume or Professional Profile. Please upload a clear CV document or image.");
     }
-    // Generic error message for user
     throw new Error("Failed to parse profile. Please ensure the file is a valid CV/Resume.");
   }
 };
@@ -136,7 +163,7 @@ export const parseCV = async (
 export const analyzeJobReadiness = async (
   profile: UserProfile,
   jobContext: JobContext
-): Promise<AnalysisResult> => {
+): Promise<{ result: AnalysisResult, modelUsed: string }> => {
   
   let model = "gemini-3-pro-preview";
   let thinkingConfig = undefined;
@@ -149,13 +176,13 @@ export const analyzeJobReadiness = async (
       break;
     case 'balanced':
       model = "gemini-3-flash-preview";
-      maxOutputTokens = 32768;
+      maxOutputTokens = 20000; // Reduced to avoid potential timeout/large response issues
       break;
     case 'deep':
     default:
       model = "gemini-3-pro-preview";
-      thinkingConfig = { thinkingBudget: 16384 }; 
-      maxOutputTokens = 65536; 
+      thinkingConfig = { thinkingBudget: 12000 }; // Slightly reduced budget for stability
+      maxOutputTokens = 32768; // Reduced from 65k to avoid timeouts
       break;
   }
 
@@ -175,17 +202,15 @@ export const analyzeJobReadiness = async (
     3. Create a learning path. LIMIT to the TOP 4 logical steps only. 
        - Each step must have a clear 'title'.
        - **estimatedTime**: Provide realistic estimates. 
-         - If the duration is in weeks or months, YOU MUST specify hours/week (e.g., "3 weeks (10h/week)", "2 months (5h/week)"). 
-         - For shorter tasks, use hours (e.g., "4 hours").
-    4. Suggest 3 alternative roles. Calculate a match percentage (0-100) for each based on current skills.
+          - Example: "3 weeks (10h/week)", "4 hours".
+    4. Suggest 3 alternative roles. Calculate a match percentage (0-100) for each.
     
-    STRICT CONSTRAINTS (MANDATORY):
+    STRICT CONSTRAINTS:
     - 'executiveSummary' must be under 50 words. Be blunt and direct.
-    - 'alternativeRoles' must include 'matchPercentage'.
     - LIMIT 'skillGaps' array to 5 items maximum.
     - LIMIT 'learningPath' array to 4 items maximum.
 
-    DO NOT include preamble or postamble. Return ONLY valid JSON.
+    Return ONLY valid JSON.
   `;
 
   const responseSchema = {
@@ -228,7 +253,7 @@ export const analyzeJobReadiness = async (
           properties: {
             role: { type: Type.STRING },
             matchReason: { type: Type.STRING },
-            matchPercentage: { type: Type.NUMBER, description: "Percentage match 0-100" }
+            matchPercentage: { type: Type.NUMBER }
           },
           required: ["role", "matchReason", "matchPercentage"]
         } 
@@ -248,33 +273,34 @@ export const analyzeJobReadiness = async (
       config.thinkingConfig = thinkingConfig;
     }
 
-    const response = await ai.models.generateContent({
+    const response = await retryWithBackoff(() => ai.models.generateContent({
       model,
       contents: prompt,
       config: config
-    });
+    }));
 
     if (!response.text) throw new Error("No analysis generated");
     
     const cleanJSON = extractJSON(response.text);
     const parsed = JSON.parse(cleanJSON);
 
-    // Sanitization to prevent undefined access errors
     if (!parsed.skillGaps || !Array.isArray(parsed.skillGaps)) parsed.skillGaps = [];
     if (!parsed.learningPath || !Array.isArray(parsed.learningPath)) parsed.learningPath = [];
     if (!parsed.alternativeRoles || !Array.isArray(parsed.alternativeRoles)) parsed.alternativeRoles = [];
     if (!parsed.executiveSummary) parsed.executiveSummary = "Analysis pending...";
     if (typeof parsed.readinessScore !== 'number') parsed.readinessScore = 0;
     
-    // Fallback for title/estimatedTime if model misses it (unlikely with schema, but safe)
     parsed.learningPath.forEach((item: any) => {
         if (!item.title) item.title = item.step;
         if (!item.estimatedTime) item.estimatedTime = "Unknown duration";
     });
 
-    return parsed as AnalysisResult;
-  } catch (error) {
+    return { result: parsed as AnalysisResult, modelUsed: model };
+  } catch (error: any) {
     console.error("Analysis failed:", error);
+    if (error.message?.includes("429") || JSON.stringify(error).includes("429")) {
+        throw new Error("You've hit the API rate limit for the 'Deep Reasoning' model. Please wait 60 seconds or try the 'Balanced' model which has higher limits.");
+    }
     throw new Error("Analysis failed. The response may have been too large or the API hit a timeout. Please try again with the 'Balanced' model.");
   }
 };
@@ -316,19 +342,26 @@ export const sendChatMessage = async (
 
   try {
     const response = await ai.models.generateContent({
-      model,
-      contents: { parts },
+      model: "gemini-3-flash-preview",
+      contents: { parts: parts },
       config: { tools: [{ googleSearch: {} }] }
     });
+    
     const text = response.text || "I couldn't generate a response.";
-    const sources = (response.candidates?.[0]?.groundingMetadata?.groundingChunks || [])
+    
+    // Extract sources from grounding chunks
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const sources = chunks
       .filter((chunk: any) => chunk.web?.uri && chunk.web?.title)
-      .map((chunk: any) => ({ title: chunk.web.title, uri: chunk.web.uri }));
+      .map((chunk: any) => ({ 
+        title: chunk.web.title, 
+        uri: chunk.web.uri 
+      }));
 
     return { text, sources };
   } catch (error) {
     console.error("Chat error:", error);
-    return { text: "Error connecting to service.", sources: [] };
+    return { text: "Error connecting to service. Please try again.", sources: [] };
   }
 };
 

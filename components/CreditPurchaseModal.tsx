@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Coins, Check, CreditCard, Loader2 } from 'lucide-react';
 import { User } from '../services/authService';
 import { authService } from '../services/authService';
+import ErrorMessage from './ErrorMessage';
 
 interface CreditPurchaseModalProps {
   isOpen: boolean;
@@ -19,11 +20,13 @@ const PACKAGES = [
 const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClose, currentUser, onPurchaseSuccess }) => {
   const [isProcessing, setIsProcessing] = useState<number | null>(null); // ID of package being purchased
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handlePurchase = async (pkgIndex: number, creditsToAdd: number, price: number) => {
     setIsProcessing(pkgIndex);
+    setError(null);
     
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -42,10 +45,10 @@ const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClo
         setIsProcessing(null);
         onClose();
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Purchase failed", error);
       setIsProcessing(null);
-      alert("Purchase failed. Please try again.");
+      setError(error.message || "Purchase failed. Please try again.");
     }
   };
 
@@ -74,6 +77,17 @@ const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClo
 
         {/* Content */}
         <div className="p-6 space-y-4">
+          {error && (
+            <div className="mb-4">
+              <ErrorMessage 
+                title="Purchase Error"
+                message={error}
+                variant="error"
+                onClose={() => setError(null)}
+              />
+            </div>
+          )}
+          
           {successMessage ? (
             <div className="flex flex-col items-center justify-center py-8 text-center space-y-4 animate-in fade-in zoom-in">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center">

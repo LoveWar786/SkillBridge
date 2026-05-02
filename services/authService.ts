@@ -15,7 +15,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { emailService } from './emailService';
 
 export interface PurchaseRecord {
@@ -35,13 +35,36 @@ export interface User {
   emailVerified?: boolean;
   purchaseHistory?: PurchaseRecord[];
   onboardingCompleted?: boolean;
+  lastLogin?: number;
+  lastVisited?: number;
 }
 
 let tempPasswordForEmailChange: string | null = null;
 
 export const authService = {
   login: async (email: string, password: string): Promise<User> => {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    let userCredential;
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
+        break;
+      } catch (error: any) {
+        attempts++;
+        // Don't retry on definitive auth errors
+        if (attempts >= 3 || 
+            error.code === 'auth/wrong-password' || 
+            error.code === 'auth/user-not-found' || 
+            error.code === 'auth/invalid-email' ||
+            error.code === 'auth/user-disabled') {
+          throw error;
+        }
+        // Wait 1s before retry for network errors
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    if (!userCredential) throw new Error("Failed to sign in");
     const firebaseUser = userCredential.user;
     
     // Fetch user data from Firestore
@@ -53,15 +76,23 @@ export const authService = {
       // Check if pending email is verified
       let currentEmail = firebaseUser.email || '';
       let pendingEmail = userData.pendingEmail;
+      
+      const updates: any = {
+        lastLogin: Date.now(),
+        lastVisited: Date.now()
+      };
 
       if (pendingEmail && firebaseUser.email === pendingEmail) {
         // Verification complete, clear pendingEmail
-        await updateDoc(doc(db, 'users', firebaseUser.uid), {
-          pendingEmail: null,
-          email: pendingEmail
-        });
+        updates.pendingEmail = null;
+        updates.email = pendingEmail;
         pendingEmail = undefined;
       }
+
+      // Non-blocking update to speed up login
+      updateDoc(doc(db, 'users', firebaseUser.uid), updates).catch(err => 
+        console.error("Background update failed:", err)
+      );
 
       return {
         uid: firebaseUser.uid,
@@ -71,10 +102,13 @@ export const authService = {
         pendingEmail,
         emailVerified: firebaseUser.emailVerified,
         purchaseHistory: userData.purchaseHistory || [],
-        onboardingCompleted: userData.onboardingCompleted || false
+        onboardingCompleted: userData.onboardingCompleted || false,
+        lastLogin: Date.now(),
+        lastVisited: Date.now()
       };
     } else {
       // Create user doc if it doesn't exist (legacy/error case)
+      const now = Date.now();
       const newUser: User = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
@@ -82,14 +116,19 @@ export const authService = {
         credits: 0,
         emailVerified: firebaseUser.emailVerified,
         purchaseHistory: [],
-        onboardingCompleted: false
+        onboardingCompleted: false,
+        lastLogin: now,
+        lastVisited: now
       };
+      // This must be awaited to ensure data consistency for new users
       await setDoc(doc(db, 'users', firebaseUser.uid), {
         name: newUser.name,
         credits: newUser.credits,
         email: newUser.email,
         welcomeCreditsGranted: false,
-        onboardingCompleted: false
+        onboardingCompleted: false,
+        lastLogin: now,
+        lastVisited: now
       });
       return newUser;
     }
@@ -105,6 +144,13 @@ export const authService = {
 
     if (userDoc.exists()) {
       const userData = userDoc.data();
+      
+      // Update last login - Non-blocking
+      updateDoc(doc(db, 'users', firebaseUser.uid), {
+        lastLogin: Date.now(),
+        lastVisited: Date.now()
+      }).catch(err => console.error("Background update failed:", err));
+
       return {
         user: {
           uid: firebaseUser.uid,
@@ -114,7 +160,9 @@ export const authService = {
           pendingEmail: userData.pendingEmail,
           emailVerified: true,
           purchaseHistory: userData.purchaseHistory || [],
-          onboardingCompleted: userData.onboardingCompleted || false
+          onboardingCompleted: userData.onboardingCompleted || false,
+          lastLogin: Date.now(),
+          lastVisited: Date.now()
         },
         isNewUser: false
       };
@@ -128,7 +176,9 @@ export const authService = {
           credits: 10,
           emailVerified: true,
           purchaseHistory: [],
-          onboardingCompleted: false
+          onboardingCompleted: false,
+          lastLogin: Date.now(),
+          lastVisited: Date.now()
         },
         isNewUser: true
       };
@@ -146,6 +196,7 @@ export const authService = {
       }
     }
 
+    const now = Date.now();
     const newUser: User = {
       uid,
       email,
@@ -153,7 +204,9 @@ export const authService = {
       credits: 10, // Default free credits
       emailVerified: true,
       purchaseHistory: [],
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      lastLogin: now,
+      lastVisited: now
     };
 
     await setDoc(doc(db, 'users', uid), {
@@ -161,7 +214,9 @@ export const authService = {
       email: newUser.email,
       credits: 10,
       welcomeCreditsGranted: true,
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      lastLogin: now,
+      lastVisited: now
     });
 
     return newUser;
@@ -180,6 +235,7 @@ export const authService = {
     // Send email verification
     await sendEmailVerification(firebaseUser);
 
+    const now = Date.now();
     const newUser: User = {
       uid: firebaseUser.uid,
       email: email,
@@ -187,7 +243,9 @@ export const authService = {
       credits: 0, // Start with 0 credits until verified
       emailVerified: false,
       purchaseHistory: [],
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      lastLogin: now,
+      lastVisited: now
     };
 
     await setDoc(doc(db, 'users', firebaseUser.uid), {
@@ -195,7 +253,9 @@ export const authService = {
       email: email,
       credits: 0,
       welcomeCreditsGranted: false,
-      onboardingCompleted: false
+      onboardingCompleted: false,
+      lastLogin: now,
+      lastVisited: now
     });
 
     return newUser;
@@ -217,10 +277,56 @@ export const authService = {
         pendingEmail: data.pendingEmail,
         emailVerified: auth.currentUser?.emailVerified,
         purchaseHistory: data.purchaseHistory || [],
-        onboardingCompleted: data.onboardingCompleted || false
+        onboardingCompleted: data.onboardingCompleted || false,
+        lastLogin: data.lastLogin,
+        lastVisited: data.lastVisited
       };
     }
     return null;
+  },
+  
+  updateLastVisited: async (uid: string) => {
+    await updateDoc(doc(db, 'users', uid), {
+      lastVisited: Date.now()
+    });
+  },
+
+  cancelEmailChange: async (uid: string) => {
+    await updateDoc(doc(db, 'users', uid), {
+      pendingEmail: null
+    });
+    tempPasswordForEmailChange = null;
+  },
+
+  deleteAccount: async (uid: string, password?: string) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error("No user logged in");
+
+    // Re-authenticate if password is provided (required for sensitive operations)
+    if (password && currentUser.email) {
+      const credential = EmailAuthProvider.credential(currentUser.email, password);
+      try {
+        await reauthenticateWithCredential(currentUser, credential);
+      } catch (error: any) {
+        if (error.code === 'auth/wrong-password') {
+          throw new Error('Incorrect password');
+        }
+        throw error;
+      }
+    }
+
+    // 1. Delete analyses
+    const analysesRef = collection(db, 'analyses');
+    const q = query(analysesRef, where('userId', '==', uid));
+    const querySnapshot = await getDocs(q);
+    const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+
+    // 2. Delete user doc
+    await deleteDoc(doc(db, 'users', uid));
+
+    // 3. Delete auth user
+    await currentUser.delete();
   },
 
   completeOnboarding: async (uid: string) => {
@@ -567,6 +673,21 @@ export const authService = {
       }
     }
     return null;
+  },
+
+  resendInitialVerificationEmail: async (): Promise<void> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) throw new Error('No user logged in');
+    
+    try {
+      await sendEmailVerification(currentUser);
+    } catch (error: any) {
+      console.error("Failed to resend initial verification email:", error);
+      if (error.code === 'auth/too-many-requests') {
+        throw new Error('Too many requests. Please wait a few minutes before trying again.');
+      }
+      throw new Error(error.message || 'Failed to resend verification email.');
+    }
   },
 
   resendEmailChangeVerification: async (newEmail: string, currentPassword?: string): Promise<void> => {
