@@ -21,6 +21,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import NotificationToast from './components/NotificationToast';
 import OnboardingModal from './components/OnboardingModal';
 import { AnimatePresence } from 'motion/react';
+import Logo from './components/Logo';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.UPLOAD);
@@ -505,7 +506,7 @@ const App: React.FC = () => {
 
       {/* Navbar */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => navigate('/')}
@@ -514,12 +515,8 @@ const App: React.FC = () => {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 cursor-pointer group" onClick={handleReset}>
-              <Zap className="w-6 h-6 sm:w-7 sm:h-7 fill-current group-hover:scale-110 transition-transform flex-shrink-0" />
-              <div className="flex flex-col">
-                <span className="font-bold text-base sm:text-xl tracking-tight text-slate-900 dark:text-white leading-none">SkillBridge</span>
-                <span className="text-[9px] sm:text-xs text-slate-500 dark:text-slate-400 leading-tight mt-0.5">AI-Powered Career Analysis</span>
-              </div>
+            <div className="flex items-center cursor-pointer group" onClick={handleReset}>
+              <Logo darkMode={darkMode} size="md" />
             </div>
           </div>
           

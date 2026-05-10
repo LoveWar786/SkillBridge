@@ -77,20 +77,44 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
                 </div>
             </div>
 
-            {/* Skills Grid */}
-            <div className="p-8">
-                <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Confirmed Skills</h4>
-                <div className="flex flex-wrap gap-2">
-                    {editedProfile.skills.map((skill, idx) => (
-                        <div 
-                            key={idx} 
-                            className={`px-3 py-1.5 rounded-lg border text-sm font-semibold flex items-center gap-2 ${getLevelColor(skill.level)}`}
-                        >
-                            <span>{skill.name}</span>
-                            <span className="opacity-50 text-xs border-l border-current pl-2 ml-1">{skill.category}</span>
+            {/* Skills Grid - Categorized by Level */}
+            <div className="p-8 space-y-8">
+                {['Advanced', 'Intermediate', 'Beginner'].map((level) => {
+                    const levelSkills = editedProfile.skills.filter(s => s.level === level);
+                    if (levelSkills.length === 0) return null;
+                    
+                    return (
+                        <div key={level} className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <h4 className={`text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full border ${
+                                    level === 'Advanced' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' :
+                                    level === 'Intermediate' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800' :
+                                    'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                                }`}>
+                                    {level}
+                                </h4>
+                                <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-3">
+                                {levelSkills.map((skill, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        className={`group relative px-4 py-2 rounded-xl border text-sm font-bold transition-all hover:scale-105 hover:shadow-md flex items-center gap-3 ${getLevelColor(skill.level)}`}
+                                    >
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-900 dark:text-white">{skill.name}</span>
+                                            <span className="text-[10px] opacity-60 font-medium uppercase tracking-tight">{skill.category}</span>
+                                        </div>
+                                        {skill.evidence && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-current opacity-30" />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    );
+                })}
             </div>
         </div>
 

@@ -211,8 +211,27 @@ Let me know how I can help you today!`
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const getFaviconPng = async (isDark: boolean): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 4;
+        canvas.width = 250 * scale;
+        canvas.height = 250 * scale;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve('');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve('');
+      img.src = isDark ? '/favicon-dark.svg' : '/favicon.svg';
+    });
+  };
+
   // --- PDF MARKDOWN & LAYOUT ENGINE ---
-  const handleDownloadChat = () => {
+  const handleDownloadChat = async () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -236,20 +255,38 @@ Let me know how I can help you today!`
     doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
     // Header
-    drawZapIcon(margin, 15, 20,[59, 130, 246]);
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const faviconPng = await getFaviconPng(isDarkMode);
+
+    const iconSize = 12.7; // 48px
+    const gap = 4.23; // 16px
+    const textX = margin + iconSize + gap;
+
+    if (faviconPng) {
+      doc.addImage(faviconPng, 'PNG', margin, 15, iconSize, iconSize);
+    } else {
+      drawZapIcon(margin, 15, 20,[59, 130, 246]);
+    }
 
     doc.setTextColor(textR, textG, textB);
-    doc.setFontSize(24);
+    doc.setFontSize(22.5); // 30px
     doc.setFont("helvetica", "bold");
-    doc.text("SkillBridge", margin + 25, 28);
+    doc.text("SkillBridge", textX, 24);
+    
+    doc.setFontSize(7.5); // 10px
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(isDarkMode ? 96 : 37, isDarkMode ? 165 : 99, isDarkMode ? 250 : 235);
+    doc.text("AI CAREER INTELLIGENCE", textX, 29, { charSpace: 0.5 });
 
+    // Subtitle / Date on the right
     doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("helvetica", "bold");
     doc.setTextColor(148, 163, 184); 
-    doc.text("Career Chat History", margin + 25, 36);
+    doc.text("Career Chat History", pageWidth - margin, 24, { align: 'right' });
 
     doc.setFontSize(10);
-    doc.text(new Date().toLocaleDateString(), pageWidth - margin, 28, { align: 'right' });
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleDateString(), pageWidth - margin, 32, { align: 'right' });
     
     doc.setDrawColor(51, 65, 85); 
     doc.setLineWidth(0.5);

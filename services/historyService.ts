@@ -1,6 +1,8 @@
 import { db, auth } from '../firebase';
 import { collection, addDoc, query, where, getDocs, limit, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { AnalysisResult, AnalysisHistoryItem, UserFeedback } from '../types';
+import { handleFirestoreError, OperationType } from './firestoreUtils';
+import { statsService } from './statsService';
 
 export const historyService = {
   saveAnalysis: async (userId: string, result: AnalysisResult, jobRole: string, companyName?: string, candidateName?: string, experienceYears?: number, modelUsed?: string, cost?: number): Promise<string> => {
@@ -22,10 +24,14 @@ export const historyService = {
         modelUsed: modelUsed || null,
         cost: cost || 0
       });
+
+      // Increment global stats
+      statsService.incrementAnalyses().catch(console.error);
+
       return docRef.id;
     } catch (error) {
-      console.error("Error saving analysis:", error);
-      throw error;
+      handleFirestoreError(error, OperationType.WRITE, 'analyses');
+      throw error; // unreachable but for TS
     }
   },
 
@@ -53,7 +59,7 @@ export const historyService = {
         feedback: feedback
       });
     } catch (error) {
-      console.error("Error adding feedback:", error);
+      handleFirestoreError(error, OperationType.WRITE, `analyses/${analysisId}`);
       throw error;
     }
   },
@@ -99,7 +105,7 @@ export const historyService = {
       // Sort by timestamp desc in memory
       return history.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
-      console.error("Error fetching history:", error);
+      handleFirestoreError(error, OperationType.GET, 'analyses');
       return [];
     }
   },
@@ -113,8 +119,7 @@ export const historyService = {
       
       await deleteDoc(doc(db, 'analyses', analysisId));
     } catch (error) {
-      console.error("Error deleting analysis:", error);
-      throw error;
+      handleFirestoreError(error, OperationType.DELETE, `analyses/${analysisId}`);
     }
   },
 

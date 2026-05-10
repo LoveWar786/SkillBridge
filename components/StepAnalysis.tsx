@@ -243,6 +243,25 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     });
   };
 
+  const getFaviconPng = async (isDark: boolean): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 4;
+        canvas.width = 250 * scale;
+        canvas.height = 250 * scale;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve('');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve('');
+      img.src = isDark ? '/favicon-dark.svg' : '/favicon.svg';
+    });
+  };
+
   // --- High Quality PDF Generation ---
   const handleSavePDF = async () => {
     try {
@@ -252,14 +271,15 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
       const margin = 15;
       let yPos = 20;
 
-      // Fetch Icons
+      // Detect Dark Mode
+      const isDarkMode = document.documentElement.classList.contains('dark');
+
+      // Fetch Icons and Logo
       const brainIcon = await getIconPng('pdf-icon-brain');
       const alertIcon = await getIconPng('pdf-icon-alert');
       const bookIcon = await getIconPng('pdf-icon-book');
       const briefcaseIcon = await getIconPng('pdf-icon-briefcase');
-
-    // Detect Dark Mode
-    const isDarkMode = document.documentElement.classList.contains('dark');
+      const faviconPng = await getFaviconPng(isDarkMode);
     const bgColor = isDarkMode ? [15, 23, 42] : [255, 255, 255]; // Slate-900 or White
     const textColor = isDarkMode ? [255, 255, 255] : [30, 41, 59]; // White or Slate-800
     const secondaryTextColor = isDarkMode ? [148, 163, 184] : [71, 85, 105]; // Slate-400 or Slate-600
@@ -346,21 +366,29 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
     doc.rect(0, 0, pageWidth, 50, 'F');
     
-    // Logo (Zap)
-    const logoColor: [number, number, number] = [59, 130, 246]; // Blue-500 (Website color)
-    drawZapIcon(margin, 15, 16, logoColor); // Slightly larger
+    const iconSize = 12.7; // 48px
+    const gap = 4.23; // 16px
+    const textX = margin + iconSize + gap;
+
+    if (faviconPng) {
+      doc.addImage(faviconPng, 'PNG', margin, 18, iconSize, iconSize);
+    } else {
+      // Fallback
+      const logoColor: [number, number, number] = [59, 130, 246]; // Blue-500 (Website color)
+      drawZapIcon(margin, 18, 20, logoColor); // Slightly larger
+    }
 
     // Title
     doc.setTextColor(textColor[0], textColor[1], textColor[2]);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(24); // Larger to match website
-    doc.text("SkillBridge", margin + 22, 26);
+    doc.setFontSize(22.5); // 30px (text-3xl)
+    doc.text("SkillBridge", textX, 26);
 
     // Subtitle
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
-    doc.text("AI-Powered Career Analysis", margin + 22, 34);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5); // 10px
+    doc.setTextColor(isDarkMode ? 96 : 37, isDarkMode ? 165 : 99, isDarkMode ? 250 : 235); // Blue-400 or Blue-600
+    doc.text("AI CAREER INTELLIGENCE", textX, 32, { charSpace: 0.5 });
 
     if (candidateName) {
         doc.setFont("helvetica", "bold");
