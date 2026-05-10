@@ -94,6 +94,7 @@ export const parseCV = async (
       fullName: { type: Type.STRING },
       summary: { type: Type.STRING },
       experienceYears: { type: Type.NUMBER },
+      category: { type: Type.STRING, description: "The general professional category or industry, e.g., 'Software Engineering', 'Marketing', 'Finance', 'Healthcare', 'Design', etc." },
       skills: {
         type: Type.ARRAY,
         items: {

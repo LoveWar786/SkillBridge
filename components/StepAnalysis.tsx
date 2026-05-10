@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { AnalysisResult, LearningStep } from '../types';
 import { RadialBarChart, RadialBar, PolarAngleAxis, ResponsiveContainer } from 'recharts';
-import { AlertTriangle, BookOpen, Briefcase, ArrowRight, BrainCircuit, Volume2, StopCircle, Loader2, Clock, Lightbulb, Download, ChevronDown, User, Star } from 'lucide-react';
+import { AlertTriangle, BookOpen, Briefcase, ArrowRight, BrainCircuit, Volume2, StopCircle, Loader2, Clock, Lightbulb, Download, ChevronDown, User, Star, Share2 } from 'lucide-react';
 import { generateSpeech, decodeAudioData, base64ToArrayBuffer } from '../services/geminiService';
 import { jsPDF } from "jspdf";
 import ErrorMessage from './ErrorMessage';
 import FeedbackWidget from './FeedbackWidget';
+import ShareModal from './ShareModal';
+
+import { auth } from '../firebase';
 
 interface StepAnalysisProps {
   result: AnalysisResult;
@@ -17,6 +20,7 @@ interface StepAnalysisProps {
   onFeedbackSubmit?: () => void;
   modelUsed?: string;
   cost?: number;
+  isSharedView?: boolean;
 }
 
 const LearningStepItem: React.FC<{ step: LearningStep; index: number }> = ({ step, index }) => {
@@ -73,7 +77,7 @@ const LearningStepItem: React.FC<{ step: LearningStep; index: number }> = ({ ste
   );
 };
 
-const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, experienceYears, onReset, analysisId, hasFeedback, onFeedbackSubmit, modelUsed, cost }) => {
+const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, experienceYears, onReset, analysisId, hasFeedback, onFeedbackSubmit, modelUsed, cost, isSharedView = false }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +96,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
   // Score UI Helpers
   const getScoreColor = (score: number) => {
     if (score >= 80) return '#22c55e';
-    if (score >= 60) return '#3b82f6';
+    if (score >= 60) return '#8b5cf6';
     if (score >= 40) return '#eab308';
     if (score >= 20) return '#f97316';
     return '#ef4444';
@@ -262,6 +266,12 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     });
   };
 
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  const handleShare = () => {
+    setIsShareModalOpen(true);
+  };
+
   // --- High Quality PDF Generation ---
   const handleSavePDF = async () => {
     try {
@@ -280,11 +290,11 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
       const bookIcon = await getIconPng('pdf-icon-book');
       const briefcaseIcon = await getIconPng('pdf-icon-briefcase');
       const faviconPng = await getFaviconPng(isDarkMode);
-    const bgColor = isDarkMode ? [15, 23, 42] : [255, 255, 255]; // Slate-900 or White
-    const textColor = isDarkMode ? [255, 255, 255] : [30, 41, 59]; // White or Slate-800
-    const secondaryTextColor = isDarkMode ? [148, 163, 184] : [71, 85, 105]; // Slate-400 or Slate-600
-    const cardBgColor = isDarkMode ? [30, 41, 59] : [255, 255, 255]; // Slate-800 or White
-    const cardBorderColor = isDarkMode ? [51, 65, 85] : [226, 232, 240]; // Slate-700 or Slate-200
+    const bgColor = isDarkMode ? [9, 9, 11] : [250, 250, 250]; // Slate-950 or Slate-50
+    const textColor = isDarkMode ? [250, 250, 250] : [24, 24, 27]; // Slate-50 or Slate-900
+    const secondaryTextColor = isDarkMode ? [161, 161, 170] : [82, 82, 91]; // Slate-400 or Slate-600
+    const cardBgColor = isDarkMode ? [24, 24, 27] : [255, 255, 255]; // Slate-900 or White
+    const cardBorderColor = isDarkMode ? [39, 39, 42] : [228, 228, 231]; // Slate-800 or Slate-200
 
     // Set Background
     doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
@@ -374,7 +384,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
       doc.addImage(faviconPng, 'PNG', margin, 18, iconSize, iconSize);
     } else {
       // Fallback
-      const logoColor: [number, number, number] = [59, 130, 246]; // Blue-500 (Website color)
+      const logoColor: [number, number, number] = [139, 92, 246]; // Violet-500
       drawZapIcon(margin, 18, 20, logoColor); // Slightly larger
     }
 
@@ -387,7 +397,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     // Subtitle
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5); // 10px
-    doc.setTextColor(isDarkMode ? 96 : 37, isDarkMode ? 165 : 99, isDarkMode ? 250 : 235); // Blue-400 or Blue-600
+    doc.setTextColor(isDarkMode ? 167 : 124, isDarkMode ? 139 : 58, isDarkMode ? 250 : 237); // Violet-400 or Violet-600
     doc.text("AI CAREER INTELLIGENCE", textX, 32, { charSpace: 0.5 });
 
     if (candidateName) {
@@ -420,7 +430,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     // ... (Score logic same as before) ...
     let r=239, g=68, b=68; let bgR=254, bgG=242, bgB=242;
     if (result.readinessScore >= 80) { r=34; g=197; b=94; bgR=240; bgG=253; bgB=244; }
-    else if (result.readinessScore >= 60) { r=59; g=130; b=246; bgR=239; bgG=246; bgB=255; }
+    else if (result.readinessScore >= 60) { r=139; g=92; b=246; bgR=245; bgG=243; bgB=255; }
     else if (result.readinessScore >= 40) { r=234; g=179; b=8; bgR=254; bgG=252; bgB=232; }
     else if (result.readinessScore >= 20) { r=249; g=115; b=22; bgR=255; bgG=247; bgB=237; }
 
@@ -517,10 +527,10 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         // Status Badge (Next to Title) - Compact
         const skillWidth = doc.getTextWidth(gap.skill);
         // Dark Grey Badge like screenshot
-        doc.setFillColor(51, 65, 85); // Slate-700
+        doc.setFillColor(63, 63, 70); // Slate-700
         const statusW = doc.getTextWidth(gap.status) + 8;
         doc.roundedRect(margin + 12 + skillWidth + 8, yPos + 6, statusW, 6, 3, 3, 'F');
-        doc.setTextColor(203, 213, 225); // Slate-300
+        doc.setTextColor(212, 212, 216); // Slate-300
         doc.setFontSize(8);
         doc.text(gap.status.toUpperCase(), margin + 12 + skillWidth + 12, yPos + 10);
 
@@ -538,17 +548,17 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
 
     // --- Recommended Learning Path (Full Width) ---
     checkSpace(40);
-    doc.setFillColor(isDarkMode ? 30 : 239, isDarkMode ? 58 : 246, isDarkMode ? 138 : 255); // Blue-50 or Dark Blue
+    doc.setFillColor(isDarkMode ? 46 : 245, isDarkMode ? 16 : 243, isDarkMode ? 101 : 255); // Violet-950 or Violet-50
     doc.roundedRect(margin, yPos, pageWidth - (margin * 2), 14, 4, 4, 'F');
     
     // Icon
     if (bookIcon) {
         doc.addImage(bookIcon, 'PNG', margin + 6, yPos + 3.5, 7, 7);
     } else {
-        drawBookIcon(margin + 6, yPos + 3, 8, isDarkMode ? [96, 165, 250] : [37, 99, 235]);
+        drawBookIcon(margin + 6, yPos + 3, 8, isDarkMode ? [167, 139, 250] : [124, 58, 237]);
     }
 
-    doc.setTextColor(isDarkMode ? 147 : 29, isDarkMode ? 197 : 78, isDarkMode ? 253 : 216); // Blue-700 or Light Blue
+    doc.setTextColor(isDarkMode ? 109 : 109, isDarkMode ? 40 : 40, isDarkMode ? 217 : 217); // Violet-700
     doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
     doc.text("Recommended Learning Path", margin + 16, yPos + 9.5);
@@ -569,7 +579,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         drawCard(margin, yPos, fullWidth, cardHeight);
 
         // Step ID
-        doc.setTextColor(37, 99, 235);
+        doc.setTextColor(124, 58, 237);
         doc.setFontSize(9);
         doc.setFont("helvetica", "bold");
         doc.text(step.step.toUpperCase(), margin + 10, yPos + 8);
@@ -583,10 +593,10 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         const timeW = doc.getTextWidth(step.estimatedTime) + 10;
         const timeX = margin + fullWidth - timeW - 10;
         
-        doc.setFillColor(isDarkMode ? 30 : 239, isDarkMode ? 58 : 246, isDarkMode ? 138 : 255);
+        doc.setFillColor(isDarkMode ? 46 : 245, isDarkMode ? 16 : 243, isDarkMode ? 101 : 255);
         doc.roundedRect(timeX, yPos + 8, timeW, 8, 4, 4, 'F');
         
-        doc.setTextColor(isDarkMode ? 147 : 29, isDarkMode ? 197 : 78, isDarkMode ? 253 : 216);
+        doc.setTextColor(isDarkMode ? 109 : 109, isDarkMode ? 40 : 40, isDarkMode ? 217 : 217);
         doc.setFontSize(9);
         doc.text(step.estimatedTime, timeX + 5, yPos + 13.5);
 
@@ -599,7 +609,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         // Suggestion Box (Website Style Match)
         const boxY = yPos + 24 + (descLines.length * 5);
         // Dark background for box (Slate-800) - Match screenshot
-        const boxBg = isDarkMode ? [30, 41, 59] : [241, 245, 249]; // Slate-800 or Slate-100
+        const boxBg = isDarkMode ? [39, 39, 42] : [244, 244, 245]; // Slate-800 or Slate-100
         doc.setFillColor(boxBg[0], boxBg[1], boxBg[2]);
         // No border, just fill
         doc.roundedRect(margin + 10, boxY, fullWidth - 20, 22, 4, 4, 'F');
@@ -613,7 +623,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         drawLightbulbIcon(margin + 15, boxY + 5, 12, [245, 158, 11]); // Amber-500
 
         // Label
-        doc.setTextColor(isDarkMode ? 148 : 100, isDarkMode ? 163 : 116, isDarkMode ? 184 : 139); // Slate-400 or Slate-500
+        doc.setTextColor(isDarkMode ? 161 : 113, isDarkMode ? 161 : 113, isDarkMode ? 170 : 122); // Slate-400 or Slate-500
         doc.setFontSize(8);
         doc.setFont("helvetica", "bold");
         doc.text("RECOMMENDED SUGGESTION", margin + 34, boxY + 8);
@@ -650,7 +660,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     checkSpace(totalSectionHeight > (pageHeight - margin * 2) ? 40 : totalSectionHeight);
     
     // Draw Section Background (Header)
-    doc.setFillColor(isDarkMode ? 15 : 15, isDarkMode ? 23 : 23, isDarkMode ? 42 : 42); // Slate-900
+    doc.setFillColor(isDarkMode ? 24 : 24, isDarkMode ? 24 : 24, isDarkMode ? 27 : 27); // Slate-900
     // If it fits on one page, draw the full background
     if (yPos + totalSectionHeight <= pageHeight - margin) {
         doc.roundedRect(margin, yPos, fullWidth, totalSectionHeight, 6, 6, 'F');
@@ -681,7 +691,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         checkSpace(cardHeight + 8);
 
         // Card BG - Dark theme for alternative roles
-        const roleCardBg: [number, number, number] = isDarkMode ? [30, 41, 59] : [15, 23, 42]; // Slate-800 or Slate-900
+        const roleCardBg: [number, number, number] = isDarkMode ? [39, 39, 42] : [24, 24, 27]; // Slate-800 or Slate-900
         doc.setFillColor(roleCardBg[0], roleCardBg[1], roleCardBg[2]);
         doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]);
         doc.setLineWidth(0.5);
@@ -696,22 +706,22 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         // Percent Badge
         const percentText = `${role.matchPercentage}% Match`;
         const percentW = doc.getTextWidth(percentText) + 8;
-        doc.setFillColor(30, 58, 138); // Blue-900
+        doc.setFillColor(76, 29, 149); // Violet-900
         doc.roundedRect(pageWidth - margin - percentW - 14, yPos + 6, percentW, 6, 2, 2, 'F');
-        doc.setTextColor(147, 197, 253); // Blue-300
+        doc.setTextColor(196, 181, 253); // Violet-300
         doc.setFontSize(9);
         doc.text(percentText, pageWidth - margin - percentW - 10, yPos + 10);
 
         // Bar BG
-        doc.setFillColor(51, 65, 85); // Slate-700
+        doc.setFillColor(63, 63, 70); // Slate-700
         doc.roundedRect(margin + 14, yPos + 14, fullWidth - 28, 2.5, 1.25, 1.25, 'F');
         // Bar Fill
-        doc.setFillColor(59, 130, 246); // Blue-500
+        doc.setFillColor(139, 92, 246); // Violet-500
         const fillW = ((fullWidth - 28) * role.matchPercentage) / 100;
         doc.roundedRect(margin + 14, yPos + 14, fillW, 2.5, 1.25, 1.25, 'F');
         
         // Reason (Full)
-        doc.setTextColor(148, 163, 184); // Slate-400
+        doc.setTextColor(161, 161, 170); // Slate-400
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
         doc.text(matchLines, margin + 14, yPos + 22);
@@ -744,8 +754,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
       <div style={{ display: 'none' }}>
         <BrainCircuit id="pdf-icon-brain" color="#a855f7" size={24} />
         <AlertTriangle id="pdf-icon-alert" color="#ef4444" size={24} />
-        <BookOpen id="pdf-icon-book" color="#3b82f6" size={24} />
-        <Briefcase id="pdf-icon-briefcase" color="#60a5fa" size={24} />
+        <BookOpen id="pdf-icon-book" color="#8b5cf6" size={24} />
+        <Briefcase id="pdf-icon-briefcase" color="#a78bfa" size={24} />
       </div>
 
       {error && (
@@ -928,8 +938,17 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
             className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-2 px-6 py-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
             <ArrowRight className="w-4 h-4 rotate-180" />
-            Start Over
+            {isSharedView ? 'Create Your Own Analysis' : 'Start Over'}
         </button>
+        {!isSharedView && auth.currentUser && (
+          <button 
+              onClick={handleShare} 
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-3 rounded-lg shadow-md flex items-center gap-2 transition-transform hover:scale-105"
+          >
+              <Share2 className="w-5 h-5" />
+              Share Result
+          </button>
+        )}
         <button 
             onClick={handleSavePDF} 
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-lg shadow-md flex items-center gap-2 transition-transform hover:scale-105"
@@ -938,6 +957,15 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
             Download PDF Report
         </button>
       </div>
+
+      {analysisId && (
+        <ShareModal 
+          isOpen={isShareModalOpen} 
+          onClose={() => setIsShareModalOpen(false)} 
+          analysisId={analysisId}
+          analysisData={result}
+        />
+      )}
     </div>
   );
 };

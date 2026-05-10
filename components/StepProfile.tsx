@@ -6,12 +6,19 @@ interface StepProfileProps {
   profile: UserProfile;
   onConfirm: (updatedProfile: UserProfile) => void;
   onBack: () => void;
+  onSaveDraft?: (updatedProfile: UserProfile) => void;
+  isSavingDraft?: boolean;
+  isLoggedIn?: boolean;
 }
 
-const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack }) => {
+const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, onSaveDraft, isSavingDraft, isLoggedIn }) => {
   // 'edit' allows changes, 'preview' shows the final confirm screen
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editedProfile, setEditedProfile] = useState<UserProfile>(JSON.parse(JSON.stringify(profile)));
+
+  React.useEffect(() => {
+    setEditedProfile(JSON.parse(JSON.stringify(profile)));
+  }, [profile]);
 
   const handleFieldChange = (field: keyof UserProfile, value: string | number) => {
     setEditedProfile(prev => ({ ...prev, [field]: value }));
@@ -61,9 +68,15 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
                 <div className="flex flex-col md:flex-row justify-between gap-6">
                     <div>
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{editedProfile.fullName || 'Candidate'}</h3>
-                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-4">
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-4 flex-wrap">
                             <Briefcase className="w-4 h-4" />
                             <span className="font-medium">{editedProfile.experienceYears} Years Experience</span>
+                            {editedProfile.category && (
+                                <>
+                                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                                    <span className="font-medium text-blue-600 dark:text-blue-400">{editedProfile.category}</span>
+                                </>
+                            )}
                         </div>
                         <p className="text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl">
                             {editedProfile.summary}
@@ -119,13 +132,29 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
         </div>
 
         <div className="flex justify-between pt-4">
-            <button 
-                onClick={() => setViewMode('edit')}
-                className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
-            >
-                <PenLine className="w-4 h-4" />
-                Edit Again
-            </button>
+            <div className="flex gap-3">
+                <button 
+                    onClick={() => setViewMode('edit')}
+                    className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
+                >
+                    <PenLine className="w-4 h-4" />
+                    Edit Again
+                </button>
+                {onSaveDraft && (
+                    <button 
+                        onClick={() => onSaveDraft(editedProfile)}
+                        disabled={isSavingDraft}
+                        className="px-6 py-3 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                        {isSavingDraft ? (
+                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Plus className="w-4 h-4" />
+                        )}
+                        {isLoggedIn ? 'Save Draft' : 'Login to Save'}
+                    </button>
+                )}
+            </div>
             <button 
                 onClick={() => onConfirm(editedProfile)}
                 className="px-8 py-3 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 shadow-lg shadow-green-200 dark:shadow-green-900/30 transition-all flex items-center gap-2 hover:translate-x-1"
@@ -150,15 +179,41 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
         {/* Header Section */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-4">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-start">
-            <div className="flex-1 w-full">
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Full Name</label>
-                <input
-                    type="text"
-                    value={editedProfile.fullName || ''}
-                    onChange={(e) => handleFieldChange('fullName', e.target.value)}
-                    className="w-full text-xl font-bold text-slate-800 dark:text-white bg-transparent border-b border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:outline-none py-1 placeholder:text-slate-300 dark:placeholder:text-slate-600"
-                    placeholder="Candidate Name"
-                />
+            <div className="flex-1 w-full space-y-4">
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Full Name</label>
+                    <input
+                        type="text"
+                        value={editedProfile.fullName || ''}
+                        onChange={(e) => handleFieldChange('fullName', e.target.value)}
+                        className="w-full text-xl font-bold text-slate-800 dark:text-white bg-transparent border-b border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:outline-none py-1 placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                        placeholder="Candidate Name"
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Professional Category</label>
+                    <input
+                        type="text"
+                        list="categories"
+                        value={editedProfile.category || ''}
+                        onChange={(e) => handleFieldChange('category', e.target.value)}
+                        className="w-full text-lg font-medium text-slate-800 dark:text-white bg-transparent border-b border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:outline-none py-1 placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                        placeholder="e.g. Software Engineering, Marketing, Design"
+                    />
+                    <datalist id="categories">
+                        <option value="Software Engineering" />
+                        <option value="Data Science & Analytics" />
+                        <option value="Product Management" />
+                        <option value="Design & UX" />
+                        <option value="Marketing" />
+                        <option value="Sales" />
+                        <option value="Finance" />
+                        <option value="Human Resources" />
+                        <option value="Operations" />
+                        <option value="Healthcare" />
+                        <option value="Education" />
+                    </datalist>
+                </div>
             </div>
             
             {/* Experience - Black Box with White Text */}
@@ -293,12 +348,28 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack })
       </div>
 
       <div className="flex justify-between pt-4">
-        <button 
-            onClick={onBack}
-            className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors"
-        >
-            Back to Upload
-        </button>
+        <div className="flex gap-3">
+            <button 
+                onClick={onBack}
+                className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors"
+            >
+                Back to Upload
+            </button>
+            {onSaveDraft && (
+                <button 
+                    onClick={() => onSaveDraft(editedProfile)}
+                    disabled={isSavingDraft}
+                    className="px-6 py-3 rounded-lg text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                    {isSavingDraft ? (
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <Plus className="w-4 h-4" />
+                    )}
+                    {isLoggedIn ? 'Save Draft' : 'Login to Save'}
+                </button>
+            )}
+        </div>
         <button 
             onClick={() => setViewMode('preview')}
             className="px-8 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-blue-900/30 transition-all flex items-center gap-2 hover:translate-x-1"

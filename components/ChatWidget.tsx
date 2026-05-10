@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Square } from 'lucide-react';
 import ErrorMessage from './ErrorMessage';
 import { sendChatMessageStream, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
 import { ChatMessage } from '../types';
@@ -10,16 +10,16 @@ import ReactMarkdown from 'react-markdown';
 // --- ROBUST MARKDOWN FOR UI ---
 const SimpleMarkdown = ({ text }: { text: string }) => {
   return (
-    <div className="markdown-content text-sm leading-relaxed">
+    <div className="markdown-content text-[13px] leading-snug">
       <ReactMarkdown
         components={{
-          h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-3 mb-1 text-inherit" {...props} />,
-          h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-2 mb-1 text-inherit" {...props} />,
-          h3: ({node, ...props}) => <h3 className="text-base font-bold mt-2 mb-1 text-inherit" {...props} />,
-          ul: ({node, ...props}) => <ul className="list-disc ml-5 mt-1 mb-2 text-inherit space-y-1" {...props} />,
-          ol: ({node, ...props}) => <ol className="list-decimal ml-5 mt-1 mb-2 text-inherit space-y-1" {...props} />,
+          h1: ({node, ...props}) => <h1 className="text-lg font-bold mt-6 first:mt-0 mb-0.5 text-inherit" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-base font-bold mt-5 first:mt-0 mb-0.5 text-inherit" {...props} />,
+          h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-4 first:mt-0 mb-0 text-inherit" {...props} />,
+          ul: ({node, ...props}) => <ul className="list-disc ml-4 mt-0.5 first:mt-0 mb-1 text-inherit space-y-0" {...props} />,
+          ol: ({node, ...props}) => <ol className="list-decimal ml-4 mt-0.5 first:mt-0 mb-1 text-inherit space-y-0" {...props} />,
           li: ({node, ...props}) => <li className="mb-0 text-inherit" {...props} />,
-          p: ({node, ...props}) => <p className="mb-2 last:mb-0 text-inherit" {...props} />,
+          p: ({node, ...props}) => <p className="mb-1 first:mt-0 last:mb-0 text-inherit" {...props} />,
           strong: ({node, ...props}) => <strong className="font-bold text-inherit" {...props} />,
           em: ({node, ...props}) => <em className="italic text-inherit" {...props} />,
           code: ({node, ...props}) => <code className="bg-black/20 rounded px-1 py-0.5 font-mono text-[0.85em] text-inherit" {...props} />,
@@ -97,17 +97,22 @@ Let me know how I can help you today!`
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Voice Mode State
-  const[isVoiceMode, setIsVoiceMode] = useState(false);
-  const[isLiveConnected, setIsLiveConnected] = useState(false);
-  const[keySelectionRequired, setKeySelectionRequired] = useState(false);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+  const [keySelectionRequired, setKeySelectionRequired] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isStopping, setIsStopping] = useState(false);
   
   // Audio Refs
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const sessionRef = useRef<any>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -139,27 +144,50 @@ Let me know how I can help you today!`
     };
   },[]);
 
-  const handleSend = async () => {
-    if ((!inputValue.trim() && !attachment) || isLoading) return;
+  const handleSend = async (overrideMessage?: string) => {
+    const messageToSend = typeof overrideMessage === 'string' ? overrideMessage : inputValue;
+    if ((!messageToSend.trim() && !attachment) || isLoading) return;
+
+    const isContinueRequest = messageToSend.trim().toLowerCase().includes('continue what you were doing') || 
+                              messageToSend.trim().toLowerCase() === 'continue';
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      content: inputValue,
+      content: messageToSend,
       attachment: attachment ? { name: attachment.name, preview: attachment.preview, type: attachment.type } : undefined
     };
 
-    setMessages(prev =>[...prev, userMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setInputValue('');
     const currentAttachment = attachment;
     setAttachment(null);
     setIsLoading(true);
+    setIsStopping(false);
 
-    const history = messages.map(m => ({ role: m.role, content: m.content }));
+    // Abort any existing operation before starting a new one
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const signal = controller.signal;
+
+    // Use a fresh snapshot of messages for history, including the new user message
+    let history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
     
     try {
-      // INSTRUCT THE AI TO VERIFY IF THE DOCUMENT IS CAREER-RELATED
       let apiContent = userMsg.content;
+      
+      if (isContinueRequest) {
+        // Find the last model message before the current user message
+        const lastModelMsg = [...messages].reverse().find(m => m.role === 'model');
+        if (lastModelMsg) {
+          apiContent = `The user wants you to continue your previous response. Your last response was: "${lastModelMsg.content}". Please continue from where you left off without repeating what you already said.`;
+        }
+      }
+
       if (currentAttachment) {
           const aiGuidance = "\n\n[SYSTEM INSTRUCTION: Analyze the attached file or image. If it is NOT related to careers, resumes, jobs, portfolios, or professional development, politely refuse to process it and inform the user that you can only assist with career-related documents. If it IS career-related, proceed normally with the user's request.]";
           apiContent = apiContent ? apiContent + aiGuidance : aiGuidance.trim();
@@ -168,29 +196,54 @@ Let me know how I can help you today!`
       const stream = sendChatMessageStream(history, apiContent, currentAttachment || undefined);
       
       const botMsgId = (Date.now() + 1).toString();
-      setMessages(prev =>[...prev, { id: botMsgId, role: 'model', content: '', sources: [] }]);
+      setMessages(prev => [...prev, { id: botMsgId, role: 'model', content: '', sources: [] }]);
       
       isScrolledUpRef.current = false;
       setTimeout(() => scrollToBottom(true), 50);
 
       for await (const chunk of stream) {
+          if (signal.aborted) {
+            break;
+          }
           setMessages(prev => prev.map(m => 
               m.id === botMsgId ? { ...m, content: chunk.text, sources: chunk.sources } : m
           ));
           scrollToBottom();
       }
     } catch (e: any) {
-      console.error(e);
-      let errorMessage = "Sorry, I'm having trouble connecting right now.";
-      const errorString = JSON.stringify(e);
-      if (e.message?.includes("429") || errorString.includes("429") || e.status === 429 || errorString.includes("RESOURCE_EXHAUSTED")) {
-        errorMessage = "The AI service is currently busy (Rate Limit Exceeded). Please wait a few seconds and try again.";
-      } else if (e.message) {
-        errorMessage = `Sorry, I'm having trouble connecting right now (${e.message}).`;
+      if (e.name === 'AbortError') {
+        console.log('Fetch aborted');
+      } else {
+        console.error(e);
+        let errorMessage = "Sorry, I'm having trouble connecting right now.";
+        const errorString = JSON.stringify(e);
+        if (e.message?.includes("429") || errorString.includes("429") || e.status === 429 || errorString.includes("RESOURCE_EXHAUSTED")) {
+          errorMessage = "The AI service is currently busy (Rate Limit Exceeded). Please wait a few seconds and try again.";
+        } else if (e.message) {
+          errorMessage = `Sorry, I'm having trouble connecting right now (${e.message}).`;
+        }
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: errorMessage }]);
       }
-      setMessages(prev =>[...prev, { id: Date.now().toString(), role: 'model', content: errorMessage }]);
     } finally {
       setIsLoading(false);
+      setIsStopping(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStopping(true);
+      setIsLoading(false);
+      // Mark the last message as stopped
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.role === 'model') {
+          return [...prev.slice(0, -1), { ...lastMsg, isStopped: true }];
+        }
+        return prev;
+      });
     }
   };
 
@@ -235,8 +288,8 @@ Let me know how I can help you today!`
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 20;
-    let yPos = 20;
+    const margin = 15; // Reduced margin
+    let yPos = 15; // Reduced initial yPos
 
     const drawZapIcon = (x: number, y: number, size: number, color:[number, number, number]) => {
         doc.setFillColor(color[0], color[1], color[2]);
@@ -246,53 +299,55 @@ Let me know how I can help you today!`
         doc.triangle(x + 13*s, y + 10*s, x + 5*s, y + 14*s, x + 11*s, y + 14*s, 'F'); 
     };
 
-    // Dark Theme Colors
-    const bgR = 15, bgG = 23, bgB = 42; 
-    const textR = 255, textG = 255, textB = 255; 
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const bgColor = isDarkMode ? [10, 10, 10] : [255, 255, 255]; 
+    const textColor = isDarkMode ? [255, 255, 255] : [10, 10, 10]; 
+    const secondaryTextColor = isDarkMode ? [160, 160, 160] : [100, 100, 100]; 
+    const cardBgColor = isDarkMode ? [20, 20, 20] : [245, 245, 245]; 
+    const cardBorderColor = isDarkMode ? [40, 40, 40] : [220, 220, 220]; 
     
     // Background
-    doc.setFillColor(bgR, bgG, bgB);
+    doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
     doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
     // Header
-    const isDarkMode = document.documentElement.classList.contains('dark');
     const faviconPng = await getFaviconPng(isDarkMode);
 
-    const iconSize = 12.7; // 48px
-    const gap = 4.23; // 16px
+    const iconSize = 10; // Reduced
+    const gap = 3; // Reduced
     const textX = margin + iconSize + gap;
 
     if (faviconPng) {
-      doc.addImage(faviconPng, 'PNG', margin, 15, iconSize, iconSize);
+      doc.addImage(faviconPng, 'PNG', margin, 12, iconSize, iconSize);
     } else {
-      drawZapIcon(margin, 15, 20,[59, 130, 246]);
+      drawZapIcon(margin, 12, 15,[168, 85, 247]); // Purple-500
     }
 
-    doc.setTextColor(textR, textG, textB);
-    doc.setFontSize(22.5); // 30px
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    doc.setFontSize(18); // Reduced
     doc.setFont("helvetica", "bold");
-    doc.text("SkillBridge", textX, 24);
+    doc.text("SkillBridge", textX, 19);
     
-    doc.setFontSize(7.5); // 10px
+    doc.setFontSize(6); // Reduced
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(isDarkMode ? 96 : 37, isDarkMode ? 165 : 99, isDarkMode ? 250 : 235);
-    doc.text("AI CAREER INTELLIGENCE", textX, 29, { charSpace: 0.5 });
+    doc.setTextColor(168, 85, 247); // Purple-500
+    doc.text("AI CAREER INTELLIGENCE", textX, 23, { charSpace: 0.3 });
 
     // Subtitle / Date on the right
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(148, 163, 184); 
-    doc.text("Career Chat History", pageWidth - margin, 24, { align: 'right' });
-
     doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(new Date().toLocaleDateString(), pageWidth - margin, 32, { align: 'right' });
-    
-    doc.setDrawColor(51, 65, 85); 
-    doc.setLineWidth(0.5);
-    doc.line(margin, 45, pageWidth - margin, 45);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]); 
+    doc.text("Chat History", pageWidth - margin, 19, { align: 'right' });
 
-    yPos = 60;
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text(new Date().toLocaleDateString(), pageWidth - margin, 24, { align: 'right' });
+    
+    doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]); 
+    doc.setLineWidth(0.2);
+    doc.line(margin, 30, pageWidth - margin, 30);
+
+    yPos = 40; // Reduced
 
     // --- MARKDOWN PROCESSOR FOR JSPDF ---
     const processMarkdown = (text: string, maxWidth: number) => {
@@ -303,28 +358,33 @@ Let me know how I can help you today!`
             let type = 'p';
             let content = block.trim();
             if (content === '') {
-                layout.push({ type: 'spacer', height: 4 });
+                layout.push({ type: 'spacer', height: 2 }); // Reduced
                 return;
             }
 
             let indent = 0;
-            let fontSize = 10;
+            let fontSize = 9; // Reduced
             let forceBold = false;
             let prefix = '';
+            let extraTopPadding = 0;
 
             // Block Level Parsing
-            if (content.startsWith('### ')) { type = 'h3'; content = content.slice(4); fontSize = 12; forceBold = true; }
-            else if (content.startsWith('## ')) { type = 'h2'; content = content.slice(3); fontSize = 14; forceBold = true; }
-            else if (content.startsWith('# ')) { type = 'h1'; content = content.slice(2); fontSize = 16; forceBold = true; }
-            else if (content.match(/^[-*] /)) { type = 'bullet'; content = content.slice(2); indent = 5; prefix = '• '; }
+            if (content.startsWith('### ')) { type = 'h3'; content = content.slice(4); fontSize = 10; forceBold = true; extraTopPadding = 2; }
+            else if (content.startsWith('## ')) { type = 'h2'; content = content.slice(3); fontSize = 11; forceBold = true; extraTopPadding = 3; }
+            else if (content.startsWith('# ')) { type = 'h1'; content = content.slice(2); fontSize = 13; forceBold = true; extraTopPadding = 4; }
+            else if (content.match(/^[-*] /)) { type = 'bullet'; content = content.slice(2); indent = 4; prefix = '• '; }
             else if (content.match(/^\d+\. /)) {
                 const match = content.match(/^(\d+\. )/);
                 type = 'numbered';
-                indent = 5;
+                indent = 4;
                 if (match) {
                     prefix = match[1];
                     content = content.slice(match[1].length);
                 }
+            }
+
+            if (extraTopPadding > 0 && layout.length > 0) {
+                layout.push({ type: 'spacer', height: extraTopPadding });
             }
 
             // Inline Parsing (Bold, Italic, Code)
@@ -337,13 +397,12 @@ Let me know how I can help you today!`
 
             if (forceBold) tokens.forEach(t => t.font = 'bold');
 
-            // Set up environment to accurately measure text width
             doc.setFont("helvetica", forceBold ? "bold" : "normal");
             doc.setFontSize(fontSize);
             const prefixWidth = prefix ? doc.getTextWidth(prefix) : 0;
             const activeMaxWidth = maxWidth - indent - prefixWidth;
             
-            const lineHeight = fontSize * 0.352778 * 1.4; // standard proportional line height
+            const lineHeight = fontSize * 0.352778 * 1.2; // Reduced line height
             let currentLine: any[] =[];
             let currentLineWidth = 0;
 
@@ -358,12 +417,11 @@ Let me know how I can help you today!`
 
                 words.forEach(word => {
                     const w = doc.getTextWidth(word);
-                    // Wrap to next line if width exceeded
                     if (currentLineWidth + w > activeMaxWidth && currentLineWidth > 0 && word.trim() !== '') {
                         layout.push({ type, segments: currentLine, height: lineHeight, indent, prefix, fontSize, forceBold });
                         currentLine =[{ text: word.replace(/^\s+/, ''), font: token.font }];
                         currentLineWidth = doc.getTextWidth(currentLine[0].text);
-                        prefix = ''; // Prefix applies only to the first line
+                        prefix = ''; 
                     } else {
                         currentLine.push({ text: word, font: token.font });
                         currentLineWidth += w;
@@ -375,7 +433,7 @@ Let me know how I can help you today!`
                 layout.push({ type, segments: currentLine, height: lineHeight, indent, prefix, fontSize, forceBold });
             }
 
-            layout.push({ type: 'spacer', height:['h1','h2','h3'].includes(type) ? 4 : 2 });
+            layout.push({ type: 'spacer', height: 1 }); // Reduced
         });
 
         if (layout.length > 0 && layout[layout.length - 1].type === 'spacer') layout.pop();
@@ -384,48 +442,55 @@ Let me know how I can help you today!`
 
     messages.forEach((msg) => {
         const isUser = msg.role === 'user';
-        const bubbleMaxWidth = (pageWidth - (margin * 2)) * 0.75; 
+        const bubbleMaxWidth = (pageWidth - (margin * 2)) * 0.85; // Increased width
         
-        // Ensure File attachments are explicitly visible in the PDF
         let pdfTextContent = msg.content || "";
         if (msg.attachment) {
             const attachmentString = `**[File Attachment: ${msg.attachment.name}]**`;
             pdfTextContent = pdfTextContent ? `${pdfTextContent}\n\n${attachmentString}` : attachmentString;
         }
 
-        const layoutLines = processMarkdown(pdfTextContent, bubbleMaxWidth - 10);
+        const layoutLines = processMarkdown(pdfTextContent, bubbleMaxWidth - 8);
         
         let remainingLayout = [...layoutLines];
         let remainingSources = msg.sources ?[...msg.sources] :[];
         let isFirstPart = true;
 
-        // Loop handles splitting long bubbles dynamically across pages
-        while (remainingLayout.length > 0 || remainingSources.length > 0) {
-            let availableHeight = pageHeight - 20 - yPos;
+        while (remainingLayout.length > 0 || remainingSources.length > 0 || (isFirstPart && msg.isStopped)) {
+            let availableHeight = pageHeight - 15 - yPos;
             
-            let minRequiredHeight = 16; // 8 top + 8 bottom padding
-            if (isFirstPart) minRequiredHeight += 8; // ME / AI Label
+            let minRequiredHeight = 10; // Reduced padding
+            if (isFirstPart) minRequiredHeight += 6; 
             
             if (remainingLayout.length > 0) {
                 minRequiredHeight += remainingLayout[0].height;
             } else if (remainingSources.length > 0) {
-                minRequiredHeight += 15; // Sources label + 1 source
+                minRequiredHeight += 10; 
             }
 
-            // Flip to new page if not enough space
+            // Ensure we account for the stopped indicator in the height check
+            if (msg.isStopped && remainingLayout.length === 0 && remainingSources.length === 0) {
+                minRequiredHeight += 10;
+            }
+
             if (availableHeight < minRequiredHeight) {
                 doc.addPage();
-                doc.setFillColor(bgR, bgG, bgB);
+                doc.setFillColor(bgColor[0], bgColor[1], bgColor[2]);
                 doc.rect(0, 0, pageWidth, pageHeight, 'F'); 
-                yPos = 30;
-                availableHeight = pageHeight - 20 - yPos;
+                yPos = 20;
+                availableHeight = pageHeight - 15 - yPos;
             }
 
             let linesToFit: any[] = [];
             let sourcesToFit: any[] =[];
             
-            let currentHeight = 16; 
-            if (isFirstPart) currentHeight += 8;
+            let currentHeight = 10; // Reduced
+            if (isFirstPart) currentHeight += 6;
+            
+            // Add height for stopped indicator if it's the last part
+            if (msg.isStopped && remainingLayout.length === 0 && remainingSources.length === 0) {
+                currentHeight += 10;
+            }
 
             while (remainingLayout.length > 0) {
                 if (currentHeight + remainingLayout[0].height > availableHeight) break;
@@ -435,17 +500,17 @@ Let me know how I can help you today!`
             }
 
             if (remainingLayout.length === 0 && remainingSources.length > 0) {
-                let sourceHeaderNeeded = 10; 
-                if (currentHeight + sourceHeaderNeeded + 5 <= availableHeight) {
+                let sourceHeaderNeeded = 8; 
+                if (currentHeight + sourceHeaderNeeded + 4 <= availableHeight) {
                     let headerAdded = false;
                     while (remainingSources.length > 0) {
                         if (!headerAdded) {
                             currentHeight += sourceHeaderNeeded;
                             headerAdded = true;
                         }
-                        if (currentHeight + 5 > availableHeight) break;
+                        if (currentHeight + 4 > availableHeight) break;
                         sourcesToFit.push(remainingSources.shift());
-                        currentHeight += 5;
+                        currentHeight += 4;
                     }
                 }
             }
@@ -454,45 +519,49 @@ Let me know how I can help you today!`
 
             // Draw Bubble
             if (isUser) {
-                doc.setFillColor(37, 99, 235); 
-                doc.setDrawColor(29, 78, 216); 
+                doc.setFillColor(147, 51, 234); // Purple-600
+                doc.setDrawColor(126, 34, 206); // Purple-700
             } else {
-                doc.setFillColor(30, 41, 59); 
-                doc.setDrawColor(51, 65, 85); 
+                doc.setFillColor(cardBgColor[0], cardBgColor[1], cardBgColor[2]); 
+                doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]); 
             }
-            doc.roundedRect(xPos, yPos, bubbleMaxWidth, currentHeight, 3, 3, 'FD');
+            doc.roundedRect(xPos, yPos, bubbleMaxWidth, currentHeight, 2, 2, 'FD'); // Reduced radius
 
-            let textY = yPos + 8;
+            let textY = yPos + 5; // Reduced
 
             // Draw speaker label
             if (isFirstPart) {
-                doc.setFontSize(8);
+                doc.setFontSize(7); // Reduced
                 doc.setFont("helvetica", "bold");
                 if (isUser) {
-                    doc.setTextColor(191, 219, 254); 
-                    doc.text("ME", xPos + 5, textY);
+                    doc.setTextColor(219, 234, 254); // Blue-100
+                    doc.text("YOU", xPos + 4, textY);
                 } else {
-                    doc.setTextColor(148, 163, 184); 
-                    doc.text("AI ASSISTANT", xPos + 5, textY);
+                    doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]); 
+                    doc.text("CAREER ASSISTANT", xPos + 4, textY);
                 }
-                textY += 6; 
+                textY += 5; 
             }
 
-            textY += 3; // Nudge to text baseline
+            textY += 2; 
 
             // Draw Markdown Lines
-            doc.setTextColor(255, 255, 255); 
+            if (isUser) {
+                doc.setTextColor(255, 255, 255); 
+            } else {
+                doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+            }
             linesToFit.forEach(line => {
                 if (line.type === 'spacer') {
                     textY += line.height;
                     return;
                 }
 
-                let currentX = xPos + 5 + (line.indent || 0);
+                let currentX = xPos + 4 + (line.indent || 0);
 
                 if (line.prefix) {
                     doc.setFont("helvetica", line.forceBold ? "bold" : "normal");
-                    doc.setFontSize(line.fontSize || 10);
+                    doc.setFontSize(line.fontSize || 9);
                     doc.text(line.prefix, currentX, textY);
                     currentX += doc.getTextWidth(line.prefix);
                 }
@@ -501,7 +570,7 @@ Let me know how I can help you today!`
                     const fontName = seg.font === 'courier' ? 'courier' : 'helvetica';
                     const fontStyle = ['bold', 'italic'].includes(seg.font) ? seg.font : 'normal';
                     doc.setFont(fontName, fontStyle);
-                    doc.setFontSize(line.fontSize || 10);
+                    doc.setFontSize(line.fontSize || 9);
                     
                     doc.text(seg.text, currentX, textY);
                     currentX += doc.getTextWidth(seg.text);
@@ -512,31 +581,45 @@ Let me know how I can help you today!`
 
             // Draw Sources
             if (sourcesToFit.length > 0) {
-                textY += 2;
+                textY += 1;
                 
-                doc.setDrawColor(255, 255, 255); 
+                doc.setDrawColor(cardBorderColor[0], cardBorderColor[1], cardBorderColor[2]); 
                 doc.setLineWidth(0.1);
-                doc.line(xPos + 5, textY - 3, xPos + bubbleMaxWidth - 5, textY - 3);
+                doc.line(xPos + 4, textY - 2, xPos + bubbleMaxWidth - 4, textY - 2);
                 
-                doc.setFontSize(7);
+                doc.setFontSize(6);
                 doc.setFont("helvetica", "bold");
-                doc.setTextColor(148, 163, 184); 
-                doc.text("SOURCES:", xPos + 5, textY);
+                doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]); 
+                doc.text("SOURCES:", xPos + 4, textY);
                 
-                textY += 4;
+                textY += 3;
 
-                doc.setFontSize(8);
+                doc.setFontSize(7);
                 doc.setFont("helvetica", "normal");
-                doc.setTextColor(96, 165, 250); 
+                doc.setTextColor(168, 85, 247); // Purple-500
                 
                 sourcesToFit.forEach(source => {
-                    const truncatedTitle = doc.splitTextToSize(`• ${source.title}`, bubbleMaxWidth - 10);
-                    doc.textWithLink(truncatedTitle[0], xPos + 5, textY, { url: source.uri });
-                    textY += 5;
+                    const truncatedTitle = doc.splitTextToSize(`• ${source.title}`, bubbleMaxWidth - 8);
+                    doc.textWithLink(truncatedTitle[0], xPos + 4, textY, { url: source.uri });
+                    textY += 4;
                 });
             }
 
-            yPos += currentHeight + 6; // Margin between chunks/bubbles
+            // Draw Stopped Indicator in PDF
+            if (msg.isStopped && remainingLayout.length === 0 && remainingSources.length === 0) {
+                textY += 2;
+                // Use a slightly different background to distinguish it, but keep it inside
+                doc.setFillColor(isDarkMode ? 30 : 240, isDarkMode ? 30 : 240, isDarkMode ? 30 : 240); 
+                doc.roundedRect(xPos + 4, textY, bubbleMaxWidth - 8, 6, 1, 1, 'F');
+                
+                doc.setFontSize(6);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]);
+                doc.text("The user stopped the response.", xPos + 8, textY + 4);
+                textY += 8;
+            }
+
+            yPos += currentHeight + 4; // Reduced margin
             isFirstPart = false;
         }
     });
@@ -545,10 +628,10 @@ Let me know how I can help you today!`
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(71, 85, 105); 
-        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
-        doc.text("SkillBridge AI Career Assistant", margin, pageHeight - 10);
+        doc.setFontSize(7);
+        doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]); 
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+        doc.text("SkillBridge - AI Career Intelligence", margin, pageHeight - 8);
     }
 
     doc.save(`SkillBridge_Chat_${new Date().toISOString().slice(0,10)}.pdf`);
@@ -579,6 +662,15 @@ Let me know how I can help you today!`
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
+      gainNodeRef.current = outputAudioContextRef.current.createGain();
+      gainNodeRef.current.gain.value = volume;
+      gainNodeRef.current.connect(outputAudioContextRef.current.destination);
+      
+      if (outputAudioContextRef.current.state === 'suspended') {
+        await outputAudioContextRef.current.resume();
+      }
+      setIsPaused(false);
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       const sessionPromise = client.live.connect({
@@ -643,7 +735,13 @@ Let me know how I can help you today!`
                 
                 const source = ctx.createBufferSource();
                 source.buffer = audioBuffer;
-                source.connect(ctx.destination);
+                
+                if (gainNodeRef.current) {
+                  source.connect(gainNodeRef.current);
+                } else {
+                  source.connect(ctx.destination);
+                }
+                
                 source.onended = () => sourcesRef.current.delete(source);
                 
                 source.start(nextStartTimeRef.current);
@@ -713,13 +811,32 @@ Let me know how I can help you today!`
       }
   };
 
+  const togglePlayback = async () => {
+    if (!outputAudioContextRef.current) return;
+    
+    if (outputAudioContextRef.current.state === 'running') {
+      await outputAudioContextRef.current.suspend();
+      setIsPaused(true);
+    } else {
+      await outputAudioContextRef.current.resume();
+      setIsPaused(false);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = newVolume;
+    }
+  };
+
   return (
     <div className="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end pointer-events-none">
       
       {isOpen && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] border border-slate-200 dark:border-slate-800 mb-4 flex flex-col pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 overflow-hidden">
           {/* Header */}
-          <div className="p-4 bg-blue-600 dark:bg-slate-950 text-white flex justify-between items-center shadow-md z-10">
+          <div className="p-3 px-4 bg-blue-600 dark:bg-slate-950 text-white flex justify-between items-center shadow-md z-10">
             <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-white/20 rounded-lg">
                     {isVoiceMode ? <Headphones className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
@@ -817,6 +934,39 @@ Let me know how I can help you today!`
                            <h3 className="text-white text-xl font-semibold mb-2">
                                {isLiveConnected ? "Listening..." : "Tap Start to Talk"}
                            </h3>
+                           
+                           {isLiveConnected && (
+                             <div className="flex flex-col items-center gap-4 mt-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/10 w-full max-w-[240px]">
+                               <div className="flex items-center gap-6">
+                                 <button
+                                   onClick={togglePlayback}
+                                   className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"
+                                   title={isPaused ? "Resume" : "Pause"}
+                                 >
+                                   {isPaused ? <Play className="w-6 h-6 fill-current" /> : <Pause className="w-6 h-6 fill-current" />}
+                                 </button>
+                                 
+                                 <div className="flex items-center gap-3 flex-1 min-w-[120px]">
+                                   <button 
+                                     onClick={() => handleVolumeChange(volume === 0 ? 1 : 0)}
+                                     className="text-white/70 hover:text-white transition-colors"
+                                   >
+                                     {volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                   </button>
+                                   <input
+                                     type="range"
+                                     min="0"
+                                     max="1"
+                                     step="0.01"
+                                     value={volume}
+                                     onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                                     className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                   />
+                                 </div>
+                               </div>
+                             </div>
+                           )}
+
                            <p className="text-slate-400 text-sm max-w-[200px] mx-auto">
                                {isLiveConnected 
                                 ? "Ask me anything about your career path, resume, or interview prep." 
@@ -846,16 +996,16 @@ Let me know how I can help you today!`
               <div 
                 ref={messagesContainerRef}
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950"
+                className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 dark:bg-slate-950"
               >
-                {messages.map((msg) => (
+                {messages.map((msg, index) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${
+                    <div className={`max-w-[85%] rounded-2xl p-2.5 text-[13px] ${
                       msg.role === 'user' 
                         ? 'bg-blue-600 text-white rounded-tr-none' 
                         : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none shadow-sm'
                     }`}>
-                      <div className={`whitespace-pre-wrap ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                      <div className={`break-words ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
                           <SimpleMarkdown text={msg.content} />
                       </div>
                       
@@ -876,12 +1026,30 @@ Let me know how I can help you today!`
                       {msg.sources && msg.sources.length > 0 && (
                         <SourceList sources={msg.sources} />
                       )}
+
+                      {msg.isStopped && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] text-slate-500 dark:text-slate-400 w-fit">
+                            <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+                            <span>The user stopped the response.</span>
+                          </div>
+                          {index === messages.length - 1 && !isLoading && (
+                            <button 
+                              onClick={() => handleSend("Continue what you were doing.")}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-[11px] text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors font-medium shadow-sm"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              Continue
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
                 {isLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-3 shadow-sm">
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-2.5 shadow-sm">
                       <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
                     </div>
                   </div>
@@ -929,13 +1097,23 @@ Let me know how I can help you today!`
                     placeholder="Ask about skills..."
                     className="flex-1 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/50 text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
-                  <button 
-                    onClick={handleSend}
-                    disabled={(!inputValue.trim() && !attachment) || isLoading}
-                    className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
+                  {isLoading && !isStopping ? (
+                    <button 
+                      onClick={handleStop}
+                      className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                      title="Stop response"
+                    >
+                      <Square className="w-4 h-4 fill-current" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleSend()}
+                      disabled={(!inputValue.trim() && !attachment) || isLoading || isStopping}
+                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  )}
                 </div>
               </div>
             </>

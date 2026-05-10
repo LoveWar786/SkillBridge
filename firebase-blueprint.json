@@ -42,6 +42,19 @@
         "activeUsers": { "type": "number" }
       },
       "required": ["totalAnalyses", "totalUsers", "cvsParsedToday", "activeUsers"]
+    },
+    "Draft": {
+      "title": "Draft",
+      "description": "A saved draft of an analysis progress",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "profile": { "type": "object" },
+        "jobContext": { "type": "object" },
+        "step": { "type": "string" }
+      },
+      "required": ["userId", "timestamp", "profile", "step"]
     }
   },
   "firestore": {
@@ -56,6 +69,10 @@
     "/stats/{docId}": {
       "schema": "GlobalStats",
       "description": "Global application statistics"
+    },
+    "/drafts/{draftId}": {
+      "schema": "Draft",
+      "description": "User saved drafts"
     }
   }
 }

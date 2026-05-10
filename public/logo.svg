@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 475" width="1200" height="475">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e9d5ff" stroke-width="0.5" opacity="0.5"/>
+    </pattern>
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncR type="linear" slope="0.03"/>
+        <feFuncG type="linear" slope="0.03"/>
+        <feFuncB type="linear" slope="0.03"/>
+      </feComponentTransfer>
+    </filter>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdf4ff" />
+      <stop offset="50%" stop-color="#f3e8ff" />
+      <stop offset="100%" stop-color="#e9d5ff" />
+    </linearGradient>
+    <linearGradient id="bridgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#d946ef" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#d8b4fe" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background with Texture -->
+  <rect width="100%" height="100%" fill="url(#bgGrad)" />
+  <rect width="100%" height="100%" fill="url(#grid)" />
+  <rect width="100%" height="100%" filter="url(#noise)" opacity="0.5" />
+  
+  <!-- Soft Glow behind the icon -->
+  <circle cx="600" cy="160" r="250" fill="url(#glow)" />
+  
+  <g transform="translate(485, 140)">
+    <!-- Data Bars forming a bridge -->
+    <rect x="0" y="60" width="20" height="60" rx="10" fill="#a855f7" opacity="0.8"/>
+    <rect x="35" y="35" width="20" height="85" rx="10" fill="#9333ea" opacity="0.85"/>
+    <rect x="70" y="15" width="20" height="105" rx="10" fill="#c026d3" opacity="0.9"/>
+    <rect x="105" y="0" width="20" height="120" rx="10" fill="#a21caf" opacity="0.95"/>
+    <rect x="140" y="15" width="20" height="105" rx="10" fill="#6d28d9" opacity="0.9"/>
+    <rect x="175" y="35" width="20" height="85" rx="10" fill="#7c3aed" opacity="0.85"/>
+    <rect x="210" y="60" width="20" height="60" rx="10" fill="#8b5cf6" opacity="0.8"/>
+    
+    <!-- Connecting Arc (The AI Bridge) -->
+    <path d="M 10 60 Q 115 -30 220 60" fill="none" stroke="url(#bridgeGrad)" stroke-width="8" stroke-linecap="round" />
+    
+    <!-- Sparkle / AI Star -->
+    <path d="M 115 -45 L 120 -55 L 130 -60 L 120 -65 L 115 -75 L 110 -65 L 100 -60 L 110 -55 Z" fill="#a855f7" />
+  </g>
+
+  <text x="600" y="340" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="80" font-weight="800" fill="#18181b" letter-spacing="-2">
+    SkillBridge
+  </text>
+  <text x="600" y="390" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#c026d3" letter-spacing="6">
+    AI CAREER INTELLIGENCE
+  </text>
+</svg>
