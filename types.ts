@@ -24,6 +24,7 @@ export interface UserProfile {
   summary?: string;
   skills: Skill[];
   experienceYears?: number;
+  category?: string;
 }
 
 export interface JobContext {
@@ -75,6 +76,7 @@ export interface ChatMessage {
     preview: string;
     type: 'image' | 'file';
   };
+  isStopped?: boolean;
 }
 
 export interface UserFeedback {
@@ -104,6 +106,15 @@ export interface CreditUsageLog {
   amount: number;
   action: string; // e.g., "Analysis: Software Engineer", "Chat"
   modelUsed?: string;
+}
+
+export interface Draft {
+  id: string;
+  userId: string;
+  timestamp: number;
+  profile: UserProfile;
+  jobContext?: JobContext;
+  step: AppStep;
 }
 
 declare global {

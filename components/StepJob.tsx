@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { JobContext } from '../types';
-import { Building2, Globe, ArrowRight, Zap, Brain, Rocket, Info, ChevronDown, Coins, AlertCircle, Search } from 'lucide-react';
+import { Building2, Globe, ArrowRight, Zap, Brain, Rocket, Info, ChevronDown, Coins, AlertCircle, Search, Save } from 'lucide-react';
 
 interface StepJobProps {
   onAnalyze: (jobContext: JobContext) => void;
@@ -8,37 +8,100 @@ interface StepJobProps {
   credits: number;
   onBuyCredits: () => void;
   isGuest: boolean;
+  onSaveDraft?: (jobContext: JobContext) => void;
+  isSavingDraft?: boolean;
+  initialContext?: JobContext;
 }
 
 const COMMON_ROLES = [
+  // Tech & Engineering
   "Software Engineer",
   "Frontend Engineer",
   "Backend Engineer",
   "Full Stack Developer",
+  "Mobile Developer (iOS/Android)",
   "DevOps Engineer",
+  "Cloud Architect",
+  "QA Engineer",
   "Data Scientist",
   "Machine Learning Engineer",
-  "Product Manager",
-  "UX/UI Designer",
-  "QA Engineer",
-  "Mobile Developer (iOS/Android)",
-  "Cloud Architect",
   "Cybersecurity Analyst",
-  "Business Analyst",
+  "Civil Engineer",
+  "Mechanical Engineer",
+  "Electrical Engineer",
+  
+  // Business & Management
+  "Product Manager",
   "Project Manager",
+  "Business Analyst",
   "Marketing Manager",
   "Sales Representative",
-  "Human Resources Manager"
+  "Human Resources Manager",
+  "Financial Analyst",
+  "Accountant",
+  "Operations Manager",
+  "Logistics Manager",
+  "Supply Chain Coordinator",
+  
+  // Creative & Design
+  "UX/UI Designer",
+  "Graphic Designer",
+  "Content Writer / Copywriter",
+  "Video Editor",
+  "Social Media Manager",
+  "Architect",
+  
+  // Healthcare
+  "Registered Nurse",
+  "Medical Doctor",
+  "Pharmacist",
+  "Physical Therapist",
+  "Healthcare Administrator",
+  
+  // Education
+  "Teacher (K-12)",
+  "University Professor",
+  "Education Administrator",
+  "Corporate Trainer",
+  
+  // Administrative & Support
+  "Administrative Assistant",
+  "Office Manager",
+  "Executive Assistant",
+  "Customer Service Representative",
+  "Receptionist",
+  
+  // Legal
+  "Lawyer / Legal Counsel",
+  "Paralegal",
+  "Compliance Officer",
+  
+  // Other Industries
+  "Real Estate Agent",
+  "Retail Manager",
+  "Construction Project Manager",
+  "Chef / Head Cook",
+  "Hospitality Manager"
 ];
 
-const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCredits, isGuest }) => {
-  const [role, setRole] = useState('');
+const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCredits, isGuest, onSaveDraft, isSavingDraft, initialContext }) => {
+  const [role, setRole] = useState(initialContext?.role || '');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [type, setType] = useState<'Generalized' | 'CompanySpecific'>('Generalized');
-  const [companyName, setCompanyName] = useState('');
-  const [description, setDescription] = useState('');
-  const [modelSpeed, setModelSpeed] = useState<'fastest' | 'balanced' | 'deep'>('balanced');
+  const [type, setType] = useState<'Generalized' | 'CompanySpecific'>(initialContext?.type || 'Generalized');
+  const [companyName, setCompanyName] = useState(initialContext?.companyName || '');
+  const [description, setDescription] = useState(initialContext?.description || '');
+  const [modelSpeed, setModelSpeed] = useState<'fastest' | 'balanced' | 'deep'>(initialContext?.modelSpeed || 'balanced');
+
+  useEffect(() => {
+    if (initialContext) {
+      setRole(initialContext.role || '');
+      setType(initialContext.type || 'Generalized');
+      setCompanyName(initialContext.companyName || '');
+      setDescription(initialContext.description || '');
+      setModelSpeed(initialContext.modelSpeed || 'balanced');
+    }
+  }, [initialContext]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -356,7 +419,7 @@ Requirements:
                 </div>
             </div>
             
-            <div className="flex justify-start">
+            <div className="flex justify-start items-center gap-4">
               <button 
                   type="button" 
                   onClick={onBack}
@@ -364,6 +427,21 @@ Requirements:
               >
                   ← Back
               </button>
+              {onSaveDraft && (
+                <button 
+                    type="button"
+                    onClick={() => onSaveDraft({ role, type, companyName, description, modelSpeed })}
+                    disabled={isSavingDraft || !role}
+                    className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                    {isSavingDraft ? (
+                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <Save className="w-4 h-4" />
+                    )}
+                    {isGuest ? 'Login to Save Progress' : 'Save Progress as Draft'}
+                </button>
+              )}
             </div>
         </div>
       </form>

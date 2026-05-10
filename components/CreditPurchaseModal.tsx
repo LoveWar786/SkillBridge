@@ -3,6 +3,7 @@ import { X, Coins, Check, CreditCard, Loader2 } from 'lucide-react';
 import { User } from '../services/authService';
 import { authService } from '../services/authService';
 import ErrorMessage from './ErrorMessage';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface CreditPurchaseModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClo
   const [isProcessing, setIsProcessing] = useState<number | null>(null); // ID of package being purchased
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { showNotification } = useNotification();
 
   if (!isOpen) return null;
 
@@ -39,6 +41,7 @@ const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClo
       const updatedUser = { ...currentUser, credits: newTotal, purchaseHistory: updatedHistory };
       onPurchaseSuccess(updatedUser);
       setSuccessMessage(`Successfully added ${creditsToAdd} credits!`);
+      showNotification(`Successfully added ${creditsToAdd} credits!`, 'success');
       
       setTimeout(() => {
         setSuccessMessage(null);

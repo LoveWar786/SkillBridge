@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight, FileText, Users, Zap, CheckCircle2, Shield, Sparkles, Moon, Sun, LayoutDashboard, History, LogOut, Settings, Plus, Download, Trash2 } from 'lucide-react';
+import { ArrowRight, FileText, Users, Zap, CheckCircle2, Shield, Sparkles, Moon, Sun, LayoutDashboard, History, LogOut, Settings, Plus, Download, Trash2, Save, Clock, Share2 } from 'lucide-react';
 import { User } from '../services/authService';
-import { AnalysisHistoryItem } from '../types';
+import { AnalysisHistoryItem, Draft } from '../types';
 import { statsService, GlobalStats } from '../services/statsService';
 import Logo from './Logo';
+import ShareModal from './ShareModal';
 
 interface LandingPageProps {
   onTryDemo: () => void;
@@ -19,6 +20,9 @@ interface LandingPageProps {
   onViewHistory?: (item: AnalysisHistoryItem) => void;
   onDeleteHistory?: (itemId: string) => void;
   onSettingsClick?: () => void;
+  drafts?: Draft[];
+  onResumeDraft?: (draft: Draft) => void;
+  onDeleteDraft?: (draftId: string) => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ 
@@ -33,7 +37,10 @@ const LandingPage: React.FC<LandingPageProps> = ({
   history = [],
   onViewHistory,
   onDeleteHistory,
-  onSettingsClick
+  onSettingsClick,
+  drafts = [],
+  onResumeDraft,
+  onDeleteDraft
 }) => {
   // Stats counters
   const [stats, setStats] = useState<GlobalStats>({
@@ -42,6 +49,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
     cvsParsedToday: 45,
     activeUsers: 12
   });
+
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [selectedAnalysis, setSelectedAnalysis] = useState<AnalysisHistoryItem | null>(null);
 
   useEffect(() => {
     // Subscribe to real stats
@@ -65,6 +75,19 @@ const LandingPage: React.FC<LandingPageProps> = ({
   if (user) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 overflow-hidden relative selection:bg-blue-500/30">
+        {selectedAnalysis && (
+          <ShareModal 
+            isOpen={isShareModalOpen}
+            onClose={() => {
+              setIsShareModalOpen(false);
+              setSelectedAnalysis(null);
+            }}
+            analysisId={selectedAnalysis.id}
+            analysisData={selectedAnalysis.result}
+            jobRole={selectedAnalysis.jobRole}
+            companyName={selectedAnalysis.companyName}
+          />
+        )}
         {/* Navbar for Logged In User */}
         <nav className="relative z-10 container mx-auto px-6 py-6 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center">
@@ -118,7 +141,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400">
@@ -128,6 +151,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <h3 className="text-3xl font-bold mb-1">{history.length}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Total Analyses</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl text-amber-600 dark:text-amber-400">
+                  <Save className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">In Progress</span>
+              </div>
+              <h3 className="text-3xl font-bold mb-1">{drafts.length}</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Saved Drafts</p>
             </div>
 
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -157,6 +191,53 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Drafts Section */}
+          {drafts.length > 0 && (
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h2 className="text-xl font-bold">Resume Progress</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {drafts.map((draft) => (
+                  <div key={draft.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm hover:border-amber-300 dark:hover:border-amber-700 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <button 
+                        onClick={() => onDeleteDraft && onDeleteDraft(draft.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1 truncate">
+                      {draft.jobContext?.role || 'Untitled Analysis'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                      Saved on {formatDate(draft.timestamp)}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full">
+                        Step {draft.step}
+                      </span>
+                      <button 
+                        onClick={() => onResumeDraft && onResumeDraft(draft)}
+                        className="text-sm font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                      >
+                        Resume <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Analysis History */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
@@ -216,6 +297,17 @@ const LandingPage: React.FC<LandingPageProps> = ({
                               className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg transition-colors"
                             >
                               View Report
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setSelectedAnalysis(item);
+                                setIsShareModalOpen(true);
+                              }}
+                              className="text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 rounded-lg transition-colors flex items-center gap-1.5"
+                              title="Share Report"
+                            >
+                              <Share2 className="w-4 h-4" />
+                              Share
                             </button>
                             {onDeleteHistory && (
                               <button 

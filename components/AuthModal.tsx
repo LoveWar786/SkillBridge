@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Mail, Lock, User, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { authService } from '../services/authService';
 import ErrorMessage from './ErrorMessage';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface AuthModalProps {
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, initialView = 'login' }) => {
   const [view, setView] = useState<'login' | 'register' | 'forgot-password' | 'google-signup-name'>(initialView);
   const [email, setEmail] = useState('');
+  const { showNotification } = useNotification();
 
   // Reset view when modal opens
   React.useEffect(() => {
@@ -41,6 +43,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
       if (view === 'forgot-password') {
         await authService.resetPassword(email);
         setSuccess('Password reset email sent! Check your inbox.');
+        showNotification('Password reset email sent! Check your inbox.', 'success');
         setIsLoading(false);
         return;
       }

@@ -136,53 +136,72 @@ export const authService = {
   },
 
   loginWithGoogle: async (): Promise<{ user: User; isNewUser: boolean }> => {
+    // Check if Firebase config is present
+    if (!auth.app.options.apiKey || !auth.app.options.authDomain) {
+      throw new Error("Firebase configuration is missing. Please set the VITE_FIREBASE_* environment variables in the AI Studio Settings menu.");
+    }
+
     const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    const firebaseUser = userCredential.user;
+    try {
+      const userCredential = await signInWithPopup(auth, provider);
+      const firebaseUser = userCredential.user;
 
-    // Check if user exists in Firestore
-    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      // Check if user exists in Firestore
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
 
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      
-      // Update last login - Non-blocking
-      updateDoc(doc(db, 'users', firebaseUser.uid), {
-        lastLogin: Date.now(),
-        lastVisited: Date.now()
-      }).catch(err => console.error("Background update failed:", err));
-
-      return {
-        user: {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: userData.name || firebaseUser.displayName || 'User',
-          credits: userData.credits || 0,
-          pendingEmail: userData.pendingEmail,
-          emailVerified: true,
-          purchaseHistory: userData.purchaseHistory || [],
-          onboardingCompleted: userData.onboardingCompleted || false,
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // Update last login - Non-blocking
+        updateDoc(doc(db, 'users', firebaseUser.uid), {
           lastLogin: Date.now(),
           lastVisited: Date.now()
-        },
-        isNewUser: false
-      };
-    } else {
-      // New user via Google - Return info but don't create doc yet
-      return {
-        user: {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          name: firebaseUser.displayName || '', // Use Google name as suggestion
-          credits: 10,
-          emailVerified: true,
-          purchaseHistory: [],
-          onboardingCompleted: false,
-          lastLogin: Date.now(),
-          lastVisited: Date.now()
-        },
-        isNewUser: true
-      };
+        }).catch(err => console.error("Background update failed:", err));
+
+        return {
+          user: {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: userData.name || firebaseUser.displayName || 'User',
+            credits: userData.credits || 0,
+            pendingEmail: userData.pendingEmail,
+            emailVerified: true,
+            purchaseHistory: userData.purchaseHistory || [],
+            onboardingCompleted: userData.onboardingCompleted || false,
+            lastLogin: Date.now(),
+            lastVisited: Date.now()
+          },
+          isNewUser: false
+        };
+      } else {
+        // New user via Google - Return info but don't create doc yet
+        return {
+          user: {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || '', // Use Google name as suggestion
+            credits: 10,
+            emailVerified: true,
+            purchaseHistory: [],
+            onboardingCompleted: false,
+            lastLogin: Date.now(),
+            lastVisited: Date.now()
+          },
+          isNewUser: true
+        };
+      }
+    } catch (error: any) {
+      console.error("Google login error:", error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error("Login cancelled. Please keep the popup open to sign in.");
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error("Login request cancelled. Please try again.");
+      } else if (error.code === 'auth/popup-blocked') {
+        throw new Error("Login popup was blocked by your browser. Please allow popups for this site.");
+      } else if (error.code === 'auth/timeout') {
+        throw new Error("Login timed out. This can happen if the popup is blocked or your connection is slow. Please check your browser settings and try again.");
+      }
+      throw error;
     }
   },
 

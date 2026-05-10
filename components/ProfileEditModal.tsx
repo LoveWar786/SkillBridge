@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, ChevronRight, Trash2, AlertTriangle } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, ChevronRight, Trash2, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { authService, User as UserType } from '../services/authService';
 import ErrorMessage from './ErrorMessage';
 import { useNavigate } from 'react-router-dom';
+import { SharedLinksTab } from './SharedLinksTab';
+import { useNotification } from '../contexts/NotificationContext';
 
-type TabType = 'account' | 'security' | 'purchases' | 'danger';
+type TabType = 'account' | 'security' | 'purchases' | 'sharedLinks' | 'danger';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -29,6 +31,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     if (isOpen) {
@@ -69,8 +72,10 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
     try {
       await authService.resendEmailChangeVerification(currentUser.pendingEmail, currentPassword);
       setResendSuccess('Verification email resent successfully!');
+      showNotification('Verification email resent successfully!', 'success');
       setTimeout(() => setResendSuccess(''), 5000);
     } catch (err: any) {
+      showNotification(err.message || 'Failed to resend verification email', 'error');
       setError(err.message || 'Failed to resend verification email');
     } finally {
       setIsResending(false);
@@ -208,6 +213,17 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
             >
               <Receipt className="w-5 h-5" />
               Purchase History
+            </button>
+            <button
+              onClick={() => setActiveTab('sharedLinks')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                activeTab === 'sharedLinks' 
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' 
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              <LinkIcon className="w-5 h-5" />
+              Shared Links
             </button>
             <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
               <button
@@ -472,6 +488,11 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
                 )}
               </div>
             )}
+            
+            {activeTab === 'sharedLinks' && (
+              <SharedLinksTab />
+            )}
+
             {activeTab === 'danger' && (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <div className="mb-6">

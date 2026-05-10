@@ -1,27 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { AppStep, UserProfile, JobContext, AnalysisResult, AnalysisHistoryItem } from './types';
+import { AppStep, UserProfile, JobContext, AnalysisResult, AnalysisHistoryItem, Draft } from './types';
 import { analyzeJobReadiness } from './services/geminiService';
 import { authService, User } from './services/authService';
 import { historyService } from './services/historyService';
+import { draftService } from './services/draftService';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import StepUpload from './components/StepUpload';
 import StepProfile from './components/StepProfile';
 import StepJob from './components/StepJob';
 import StepAnalysis from './components/StepAnalysis';
+import SharedResultPage from './components/SharedResultPage';
 import ChatWidget from './components/ChatWidget';
 import AuthModal from './components/AuthModal';
 import ProfileEditModal from './components/ProfileEditModal';
 import CreditPurchaseModal from './components/CreditPurchaseModal';
 import LandingPage from './components/LandingPage';
-import { Loader2, Zap, Moon, Sun, Coins, LogIn, User as UserIcon, LogOut, Settings, Plus, AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Loader2, Zap, Moon, Sun, Coins, LogIn, User as UserIcon, LogOut, Settings, Plus, AlertCircle, CheckCircle, ArrowLeft, Save } from 'lucide-react';
 import ErrorMessage from './components/ErrorMessage';
 import ConfirmationModal from './components/ConfirmationModal';
-import NotificationToast from './components/NotificationToast';
 import OnboardingModal from './components/OnboardingModal';
 import { AnimatePresence } from 'motion/react';
 import Logo from './components/Logo';
+import { useNotification } from './contexts/NotificationContext';
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.UPLOAD);
@@ -39,23 +41,27 @@ const App: React.FC = () => {
   // Auth & Credits State
   const [user, setUser] = useState<User | null>(null);
   const [history, setHistory] = useState<AnalysisHistoryItem[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(undefined);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [guestCredits, setGuestCredits] = useState(2); // Default trial credits for guests
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalInitialView, setAuthModalInitialView] = useState<'login' | 'register'>('login');
   const [isProfileEditModalOpen, setIsProfileEditModalOpen] = useState(false);
   const [isCreditPurchaseModalOpen, setIsCreditPurchaseModalOpen] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
-  const [showVerificationAlert, setShowVerificationAlert] = useState(false);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
-  const [resendVerificationMessage, setResendVerificationMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
-  const [emailChangeNotification, setEmailChangeNotification] = useState<{old: string, new: string} | null>(null);
-  const [nameChangeNotification, setNameChangeNotification] = useState<{old: string, new: string} | null>(null);
   const pendingEmailRef = useRef<string | undefined>(undefined);
 
   // Delete Confirmation
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false);
+  const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
+  const [isSaveDraftModalOpen, setIsSaveDraftModalOpen] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState<{ profile: UserProfile, context?: JobContext } | null>(null);
+  
+  const { showNotification } = useNotification();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -99,6 +105,9 @@ const App: React.FC = () => {
           // Fetch history
           const userHistory = await historyService.getUserHistory(userData.uid);
           setHistory(userHistory);
+          // Fetch drafts
+          const userDrafts = await draftService.getUserDrafts(userData.uid);
+          setDrafts(userDrafts);
         } else {
           // Fallback if firestore doc missing (shouldn't happen with correct flow)
           setUser({
@@ -151,8 +160,7 @@ const App: React.FC = () => {
           const updatedUser = await authService.checkInitialEmailVerification(user.uid);
           if (updatedUser) {
             setUser(updatedUser);
-            setShowVerificationAlert(true);
-            setTimeout(() => setShowVerificationAlert(false), 5000);
+            showNotification('Email Verified! You have received 10 free credits.', 'success');
           }
         } catch (error) {
           console.error("Error checking verification:", error);
@@ -218,18 +226,18 @@ const App: React.FC = () => {
     setUser(loggedInUser);
     const userHistory = await historyService.getUserHistory(loggedInUser.uid);
     setHistory(userHistory);
+    const userDrafts = await draftService.getUserDrafts(loggedInUser.uid);
+    setDrafts(userDrafts);
     // Stay on homepage or current page
   };
 
   const handleProfileUpdateSuccess = (updatedUser: User, oldName?: string, oldEmail?: string) => {
     setUser(updatedUser);
     if (oldName && oldName !== updatedUser.name) {
-      setNameChangeNotification({ old: oldName, new: updatedUser.name });
-      setTimeout(() => setNameChangeNotification(null), 5000);
+      showNotification(`Name changed from ${oldName} to ${updatedUser.name}`, 'success');
     }
     if (oldEmail && oldEmail !== updatedUser.email) {
-      setEmailChangeNotification({ old: oldEmail, new: updatedUser.email });
-      setTimeout(() => setEmailChangeNotification(null), 5000);
+      showNotification(`Email changed from ${oldEmail} to ${updatedUser.email}`, 'success');
     }
   };
 
@@ -242,6 +250,8 @@ const App: React.FC = () => {
     authService.logout();
     setUser(null);
     setHistory([]);
+    setDrafts([]);
+    setCurrentDraftId(undefined);
     navigate('/');
     // Re-read guest credits
     const storedGuestCredits = localStorage.getItem('skillbridge_guest_credits');
@@ -342,6 +352,7 @@ const App: React.FC = () => {
       }
 
       setCurrentStep(AppStep.RESULTS);
+      showNotification('Analysis completed successfully!', 'success');
     } catch (error: any) {
       console.error(error);
       setAppError(error.message || "Analysis failed. Please try again.");
@@ -366,6 +377,7 @@ const App: React.FC = () => {
     setProfile(null);
     setJobContext(null);
     setAnalysisResult(null);
+    setCurrentDraftId(undefined);
     setCurrentStep(AppStep.UPLOAD);
   };
 
@@ -397,6 +409,79 @@ const App: React.FC = () => {
     navigate('/app');
   };
 
+  const handleSaveDraft = async (currentProfile: UserProfile, currentJobContext?: JobContext) => {
+    if (!user) {
+      setAuthModalInitialView('register');
+      setIsAuthModalOpen(true);
+      showNotification('Please log in to save your progress as a draft.', 'info');
+      return;
+    }
+
+    setPendingSaveData({ profile: currentProfile, context: currentJobContext });
+    setIsSaveDraftModalOpen(true);
+  };
+
+  const handleConfirmSaveDraft = async () => {
+    if (!user || !pendingSaveData) return;
+
+    setIsSavingDraft(true);
+    setIsSaveDraftModalOpen(false);
+    try {
+      const draftId = await draftService.saveDraft(
+        user.uid,
+        pendingSaveData.profile,
+        currentStep,
+        pendingSaveData.context,
+        currentDraftId
+      );
+      setCurrentDraftId(draftId);
+      
+      // Refresh drafts
+      const updatedDrafts = await draftService.getUserDrafts(user.uid);
+      setDrafts(updatedDrafts);
+      
+      showNotification('Progress saved as draft!', 'success');
+    } catch (error: any) {
+      console.error("Failed to save draft:", error);
+      showNotification('Failed to save draft.', 'error');
+    } finally {
+      setIsSavingDraft(false);
+      setPendingSaveData(null);
+    }
+  };
+
+  const handleResumeDraft = (draft: Draft) => {
+    setProfile(draft.profile);
+    setJobContext(draft.jobContext || null);
+    setCurrentStep(draft.step);
+    setCurrentDraftId(draft.id);
+    navigate('/app');
+    showNotification('Draft resumed!', 'success');
+  };
+
+  const handleDeleteDraft = (draftId: string) => {
+    setDraftToDelete(draftId);
+    setIsDeleteDraftModalOpen(true);
+  };
+
+  const handleConfirmDeleteDraft = async () => {
+    if (!user || !draftToDelete) return;
+    try {
+      await draftService.deleteDraft(draftToDelete);
+      setDrafts(prev => prev.filter(d => d.id !== draftToDelete));
+      if (currentDraftId === draftToDelete) {
+        setCurrentDraftId(undefined);
+      }
+      showNotification('Draft deleted.', 'success');
+    } catch (error) {
+      console.error("Failed to delete draft:", error);
+      showNotification('Failed to delete draft.', 'error');
+    } finally {
+      setIsDeleteDraftModalOpen(false);
+      setDraftToDelete(null);
+    }
+  };
+
   const handleFeedbackSubmit = async () => {
     if (user) {
       // Refresh history to include the new feedback
@@ -419,10 +504,10 @@ const App: React.FC = () => {
     try {
       await historyService.deleteAnalysis(itemToDelete);
       setHistory(prev => prev.filter(item => item.id !== itemToDelete));
-      setNotification({ message: 'Analysis deleted successfully', type: 'success' });
+      showNotification('Analysis deleted successfully', 'success');
     } catch (error: any) {
       console.error("Failed to delete analysis:", error);
-      setNotification({ message: `Failed to delete analysis: ${error.message || 'Unknown error'}`, type: 'error' });
+      showNotification(`Failed to delete analysis: ${error.message || 'Unknown error'}`, 'error');
     } finally {
       setIsDeleteModalOpen(false);
       setItemToDelete(null);
@@ -450,22 +535,20 @@ const App: React.FC = () => {
 
       setUser(prev => prev ? { ...prev, onboardingCompleted: true, name: data.name || prev.name } : null);
       setIsOnboardingModalOpen(false);
-      setNotification({ message: "Profile setup complete!", type: 'success' });
+      showNotification("Profile setup complete!", 'success');
     } catch (error) {
       console.error("Onboarding error:", error);
-      setNotification({ message: "Failed to save profile.", type: 'error' });
+      showNotification("Failed to save profile.", 'error');
     }
   };
 
   const handleResendVerification = async () => {
     setIsResendingVerification(true);
-    setResendVerificationMessage(null);
     try {
       await authService.resendInitialVerificationEmail();
-      setResendVerificationMessage({ text: 'Verification email resent successfully!', type: 'success' });
-      setTimeout(() => setResendVerificationMessage(null), 5000);
+      showNotification('Verification email resent successfully!', 'success');
     } catch (error: any) {
-      setResendVerificationMessage({ text: error.message || 'Failed to resend email.', type: 'error' });
+      showNotification(error.message || 'Failed to resend email.', 'error');
     } finally {
       setIsResendingVerification(false);
     }
@@ -662,6 +745,9 @@ const App: React.FC = () => {
             profile={profile} 
             onConfirm={handleProfileConfirmed}
             onBack={() => setCurrentStep(AppStep.UPLOAD)} 
+            onSaveDraft={(updatedProfile) => handleSaveDraft(updatedProfile, jobContext || undefined)}
+            isSavingDraft={isSavingDraft}
+            isLoggedIn={!!user}
           />
         )}
 
@@ -672,6 +758,9 @@ const App: React.FC = () => {
             credits={displayCredits}
             onBuyCredits={() => setIsCreditPurchaseModalOpen(true)}
             isGuest={!user}
+            onSaveDraft={(context) => profile && handleSaveDraft(profile, context)}
+            isSavingDraft={isSavingDraft}
+            initialContext={jobContext || undefined}
           />
         )}
 
@@ -710,6 +799,45 @@ const App: React.FC = () => {
 
       </main>
 
+      <ConfirmationModal
+        isOpen={isSaveDraftModalOpen}
+        onClose={() => {
+          setIsSaveDraftModalOpen(false);
+          setPendingSaveData(null);
+        }}
+        onConfirm={handleConfirmSaveDraft}
+        title="Save Progress"
+        message="Are you sure you want to save your progress as a draft? You can resume it later from your dashboard."
+        confirmText="Save Draft"
+        isDangerous={false}
+      />
+
+      <ConfirmationModal
+        isOpen={isDeleteDraftModalOpen}
+        onClose={() => {
+          setIsDeleteDraftModalOpen(false);
+          setDraftToDelete(null);
+        }}
+        onConfirm={handleConfirmDeleteDraft}
+        title="Delete Draft"
+        message="Are you sure you want to delete this draft? This action cannot be undone."
+        confirmText="Delete"
+        isDangerous={true}
+      />
+
+      <ConfirmationModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setItemToDelete(null);
+        }}
+        onConfirm={handleConfirmDelete}
+        title="Delete Analysis"
+        message="Are you sure you want to delete this analysis from your history?"
+        confirmText="Delete"
+        isDangerous={true}
+      />
+
     </div>
   );
 
@@ -741,53 +869,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Resend Verification Message */}
-      {resendVerificationMessage && (
-        <div className={`fixed top-16 right-4 z-50 px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border ${
-          resendVerificationMessage.type === 'success' 
-            ? 'bg-emerald-500 text-white border-emerald-400' 
-            : 'bg-red-500 text-white border-red-400'
-        }`}>
-          {resendVerificationMessage.type === 'success' ? <CheckCircle className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
-          <div>
-            <p className="font-bold text-sm leading-tight">{resendVerificationMessage.text}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Verification Success Popup */}
-      {showVerificationAlert && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Email Verified!</p>
-            <p className="text-emerald-50 text-sm">You have received 10 free credits.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Email Change Success Popup */}
-      {emailChangeNotification && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Email Changed!</p>
-            <p className="text-emerald-50 text-sm">Email Changed from {emailChangeNotification.old} to {emailChangeNotification.new}!</p>
-          </div>
-        </div>
-      )}
-
-      {/* Name Change Success Popup */}
-      {nameChangeNotification && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-white px-6 py-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 fade-in duration-300 flex items-center gap-3 border border-emerald-400">
-          <CheckCircle className="w-6 h-6" />
-          <div>
-            <p className="font-bold text-lg leading-tight">Name Changed!</p>
-            <p className="text-emerald-50 text-sm">Name Changed from {nameChangeNotification.old} to {nameChangeNotification.new}!</p>
-          </div>
-        </div>
-      )}
-
       <Routes>
         <Route 
           path="/" 
@@ -812,6 +893,9 @@ const App: React.FC = () => {
               onViewHistory={handleViewHistory}
               onDeleteHistory={handleDeleteHistory}
               onSettingsClick={() => setIsProfileEditModalOpen(true)}
+              drafts={drafts}
+              onResumeDraft={handleResumeDraft}
+              onDeleteDraft={handleDeleteDraft}
             />
             <AuthModal 
               isOpen={isAuthModalOpen} 
@@ -842,20 +926,21 @@ const App: React.FC = () => {
                   confirmText="Delete"
                   isDangerous={true}
                 />
+                <ConfirmationModal
+                  isOpen={isDeleteDraftModalOpen}
+                  onClose={() => setIsDeleteDraftModalOpen(false)}
+                  onConfirm={handleConfirmDeleteDraft}
+                  title="Delete Draft"
+                  message="Are you sure you want to delete this draft? Your saved progress will be lost."
+                  confirmText="Delete Draft"
+                  isDangerous={true}
+                />
               </>
             )}
-            <AnimatePresence>
-              {notification && (
-                <NotificationToast
-                  message={notification.message}
-                  type={notification.type}
-                  onClose={() => setNotification(null)}
-                />
-              )}
-            </AnimatePresence>
           </>
         } 
       />
+      <Route path="/shared/:id" element={<SharedResultPage darkMode={darkMode} />} />
       <Route path="/app/*" element={mainAppContent} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
