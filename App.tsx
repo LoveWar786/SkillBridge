@@ -30,6 +30,8 @@ const App: React.FC = () => {
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | undefined>(undefined);
   const [currentAnalysisHasFeedback, setCurrentAnalysisHasFeedback] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [modelUsed, setModelUsed] = useState<string | undefined>(undefined);
+  const [analysisCost, setAnalysisCost] = useState<number | undefined>(undefined);
   const [darkMode, setDarkMode] = useState(false);
   const [appError, setAppError] = useState<string | null>(null);
   
@@ -82,7 +84,17 @@ const App: React.FC = () => {
         // User is signed in, fetch additional data from Firestore
         const userData = await authService.getUserData(firebaseUser.uid);
         if (userData) {
-          setUser(userData);
+          // Update last visited
+          authService.updateLastVisited(firebaseUser.uid).catch(console.error);
+          userData.lastVisited = Date.now();
+          
+          setUser(prevUser => {
+            // If prevUser already has a newer lastLogin, keep it to prevent race conditions
+            if (prevUser && prevUser.lastLogin && userData.lastLogin && prevUser.lastLogin > userData.lastLogin) {
+              userData.lastLogin = prevUser.lastLogin;
+            }
+            return userData;
+          });
           // Fetch history
           const userHistory = await historyService.getUserHistory(userData.uid);
           setHistory(userHistory);
@@ -300,8 +312,10 @@ const App: React.FC = () => {
     setJobContext(context);
 
     try {
-      const { result, modelUsed } = await analyzeJobReadiness(profile, context);
+      const { result, modelUsed: usedModel } = await analyzeJobReadiness(profile, context);
       setAnalysisResult(result);
+      setModelUsed(usedModel);
+      setAnalysisCost(cost);
       
       // Save history if logged in
       if (user) {
@@ -312,7 +326,7 @@ const App: React.FC = () => {
           context.companyName,
           profile.fullName,
           profile.experienceYears,
-          modelUsed,
+          usedModel,
           cost
         );
         setCurrentAnalysisId(newAnalysisId);
@@ -374,6 +388,8 @@ const App: React.FC = () => {
         summary: ''
     });
     
+    setModelUsed(item.modelUsed);
+    setAnalysisCost(item.cost);
     setCurrentAnalysisId(item.id);
     setCurrentAnalysisHasFeedback(!!item.feedback);
     setCurrentStep(AppStep.RESULTS);
@@ -690,17 +706,12 @@ const App: React.FC = () => {
             analysisId={currentAnalysisId}
             hasFeedback={currentAnalysisHasFeedback}
             onFeedbackSubmit={handleFeedbackSubmit}
-            modelUsed={jobContext?.modelSpeed === 'fastest' ? 'Gemini Flash Lite' : jobContext?.modelSpeed === 'balanced' ? 'Gemini 3.0 Flash' : 'Gemini 3.0 Pro'}
-            cost={jobContext?.modelSpeed === 'fastest' ? 2 : jobContext?.modelSpeed === 'balanced' ? 3 : 5}
+            modelUsed={modelUsed || (jobContext?.modelSpeed === 'fastest' ? 'Gemini 2.5 Flash Lite' : jobContext?.modelSpeed === 'balanced' ? 'Gemini 3.0 Flash' : 'Gemini 3.1 Pro')}
+            cost={analysisCost || (jobContext?.modelSpeed === 'fastest' ? 2 : jobContext?.modelSpeed === 'balanced' ? 3 : 5)}
           />
         )}
 
       </main>
-
-      {/* Floating Chatbot */}
-      {!isProfileEditModalOpen && !isCreditPurchaseModalOpen && !isAuthModalOpen && (
-        <ChatWidget />
-      )}
 
     </div>
   );
@@ -851,6 +862,11 @@ const App: React.FC = () => {
       <Route path="/app/*" element={mainAppContent} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    
+    {/* Floating Chatbot - Rendered globally */}
+    {!isProfileEditModalOpen && !isCreditPurchaseModalOpen && !isAuthModalOpen && (
+      <ChatWidget />
+    )}
     </>
   );
 };

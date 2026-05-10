@@ -1,5 +1,5 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://cdn.discordapp.com/attachments/833714417274585131/1477354717653762139/Stay_Tuned.jpg?ex=69a4754c&is=69a323cc&hm=013d737180d216a7a3749a9db8a4052f980404e8f98ca494d1892ef08fcc9e51&" />
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/LoveWar786/SkillBridge/blob/main/SkillBridge.jpg" />
 </div>
 
 # ⚡ SkillBridge 

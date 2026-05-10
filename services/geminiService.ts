@@ -65,7 +65,7 @@ export const parseCV = async (
   fileData: string,
   mimeType: string
 ): Promise<UserProfile> => {
-  const model = "gemini-flash-latest";
+  const model = "gemini-3.1-flash-lite-preview";
   
   const prompt = `
     You are an expert Skills Analysis AI. Analyze the input document (Resume/CV/Bio).
@@ -147,10 +147,11 @@ export const parseCV = async (
     return parsed as UserProfile;
   } catch (error: any) {
     console.error("Error parsing CV:", error);
-    if (error.message?.includes("429") || JSON.stringify(error).includes("429")) {
+    const errorString = JSON.stringify(error);
+    if (error.message?.includes("429") || errorString.includes("429") || error.status === 429 || errorString.includes("RESOURCE_EXHAUSTED")) {
         throw new Error("The AI service is currently busy (Rate Limit Exceeded). Please wait a few seconds and try again.");
     }
-    if (error.message === "INVALID_CONTENT" || error.message.includes("INVALID_CONTENT")) {
+    if (error.message === "INVALID_CONTENT" || error.message?.includes("INVALID_CONTENT")) {
         throw new Error("The uploaded file does not appear to be a valid Resume or Professional Profile. Please upload a clear CV document or image.");
     }
     throw new Error("Failed to parse profile. Please ensure the file is a valid CV/Resume.");
@@ -165,24 +166,18 @@ export const analyzeJobReadiness = async (
   jobContext: JobContext
 ): Promise<{ result: AnalysisResult, modelUsed: string }> => {
   
-  let model = "gemini-3-pro-preview";
-  let thinkingConfig = undefined;
-  let maxOutputTokens = 16384; 
+  let model = "gemini-3-flash-preview";
 
   switch (jobContext.modelSpeed) {
     case 'fastest':
-      model = "gemini-flash-lite-latest";
-      maxOutputTokens = 16384;
+      model = "gemini-3.1-flash-lite-preview";
       break;
     case 'balanced':
       model = "gemini-3-flash-preview";
-      maxOutputTokens = 20000; // Reduced to avoid potential timeout/large response issues
       break;
     case 'deep':
     default:
-      model = "gemini-3-pro-preview";
-      thinkingConfig = { thinkingBudget: 12000 }; // Slightly reduced budget for stability
-      maxOutputTokens = 32768; // Reduced from 65k to avoid timeouts
+      model = "gemini-3.1-pro-preview";
       break;
   }
 
@@ -265,13 +260,8 @@ export const analyzeJobReadiness = async (
   try {
     const config: any = {
       responseMimeType: "application/json",
-      responseSchema: responseSchema,
-      maxOutputTokens: maxOutputTokens
+      responseSchema: responseSchema
     };
-
-    if (thinkingConfig && (model.includes('gemini-3') || model.includes('gemini-2.5'))) {
-      config.thinkingConfig = thinkingConfig;
-    }
 
     const response = await retryWithBackoff(() => ai.models.generateContent({
       model,
@@ -298,9 +288,20 @@ export const analyzeJobReadiness = async (
     return { result: parsed as AnalysisResult, modelUsed: model };
   } catch (error: any) {
     console.error("Analysis failed:", error);
-    if (error.message?.includes("429") || JSON.stringify(error).includes("429")) {
-        throw new Error("You've hit the API rate limit for the 'Deep Reasoning' model. Please wait 60 seconds or try the 'Balanced' model which has higher limits.");
+    const errorString = JSON.stringify(error);
+    const isRateLimit = error.message?.includes("429") || errorString.includes("429") || error.status === 429 || errorString.includes("RESOURCE_EXHAUSTED");
+    
+    // Check for 403 or other permissions errors that might indicate model access issues (e.g. Free tier vs Pro)
+    const isAccessDenied = error.status === 403 || error.message?.includes("403") || errorString.includes("PERMISSION_DENIED");
+
+    if (isRateLimit) {
+        throw new Error("You've hit the API rate limit. Please wait a few seconds or try the 'Balanced' model which has higher limits.");
     }
+    
+    if (isAccessDenied && model.includes("pro")) {
+        throw new Error("Your API key may not support the 'Deep' (Pro) model or has exceeded its quota. Please try the 'Balanced' or 'Fastest' mode.");
+    }
+
     throw new Error("Analysis failed. The response may have been too large or the API hit a timeout. Please try again with the 'Balanced' model.");
   }
 };
@@ -308,15 +309,23 @@ export const analyzeJobReadiness = async (
 /**
  * Chat with the AI about career advice using Search Grounding.
  */
-export const sendChatMessage = async (
+export const sendChatMessageStream = async function* (
   history: { role: string, content: string }[],
   newMessage: string,
   attachment?: { type: 'image' | 'file', preview: string, name: string }
-) => {
-  const model = "gemini-3-flash-preview";
+) {
+  // Using gemini-flash-latest for best stability and rate limits
+  const model = "gemini-flash-latest";
+
+  if (!process.env.API_KEY) {
+    console.error("API Key is missing");
+    yield { text: "Configuration Error: API Key is missing. Please check your settings.", sources: [] };
+    return;
+  }
+
   const context = history.map(h => `${h.role}: ${h.content}`).join('\n');
   
-  const parts: any[] = [{ text: `Context: ${context}\nUser: ${newMessage}\nProvide concise career advice. Use Markdown for bolding key terms. Use Search Grounding.` }];
+  const parts: any[] = [{ text: `Context: ${context}\nUser: ${newMessage}\nProvide concise career advice. Use Markdown for bolding key terms. Use Search Grounding to provide sources, but DO NOT include inline citations (like [1], [2]) or a Sources section in the text response.` }];
 
   if (attachment) {
       const base64Data = attachment.preview.split(',')[1];
@@ -340,28 +349,70 @@ export const sendChatMessage = async (
       }
   }
 
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: { parts: parts },
-      config: { tools: [{ googleSearch: {} }] }
-    });
-    
-    const text = response.text || "I couldn't generate a response.";
-    
-    // Extract sources from grounding chunks
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const sources = chunks
-      .filter((chunk: any) => chunk.web?.uri && chunk.web?.title)
-      .map((chunk: any) => ({ 
-        title: chunk.web.title, 
-        uri: chunk.web.uri 
-      }));
+  const config: any = {};
+  
+  // Search grounding is only supported for text-only inputs.
+  // If we have an inlineData attachment (image/pdf), we cannot use googleSearch.
+  const hasMultimodalAttachment = attachment && !attachment.name.toLowerCase().endsWith('.docx');
+  
+  if (!hasMultimodalAttachment) {
+      config.tools = [{ googleSearch: {} }];
+  }
 
-    return { text, sources };
-  } catch (error) {
+  try {
+    const responseStream = await retryWithBackoff(() => ai.models.generateContentStream({
+      model,
+      contents: { parts: parts },
+      config: config
+    }));
+    
+    let fullText = "";
+    let sources: any[] = [];
+
+    for await (const chunk of responseStream) {
+        // Extract sources from grounding chunks first
+        const groundingChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        if (groundingChunks.length > 0) {
+            const extractedSources = groundingChunks
+              .filter((c: any) => c.web?.uri && c.web?.title)
+              .map((c: any) => ({ 
+                title: c.web.title, 
+                uri: c.web.uri 
+              }));
+            if (extractedSources.length > 0) {
+                const newSources = [...sources, ...extractedSources];
+                sources = Array.from(new Map(newSources.map(s => [s.uri, s])).values());
+            }
+        }
+
+        if (chunk.text) {
+            const delta = chunk.text;
+            
+            // Typewriter effect: yield a few characters at a time
+            const chunkSize = 3;
+            for (let i = 0; i < delta.length; i += chunkSize) {
+                fullText += delta.slice(i, i + chunkSize);
+                // Remove inline citations like [1], [1, 2], [1-3] etc. from the yielded text
+                const cleanedText = fullText.replace(/\[\d+(?:[,\-]\s*\d+)*\]/g, '');
+                yield { text: cleanedText, sources: sources };
+                await new Promise(r => setTimeout(r, 15)); // 15ms delay for human touch
+            }
+        } else if (sources.length > 0) {
+            // If there's no text but we found sources, yield them
+            const cleanedText = fullText.replace(/\[\d+(?:[,\-]\s*\d+)*\]/g, '');
+            yield { text: cleanedText, sources: sources };
+        }
+    }
+
+  } catch (error: any) {
     console.error("Chat error:", error);
-    return { text: "Error connecting to service. Please try again.", sources: [] };
+    const errorString = JSON.stringify(error);
+    if (error.message?.includes("429") || errorString.includes("429") || error.status === 429 || errorString.includes("RESOURCE_EXHAUSTED")) {
+      yield { text: "System is busy (Rate Limit). Please wait 10-15 seconds and try again.", sources: [] };
+    } else {
+      const errorMsg = error.message || error.statusText || "Unknown error";
+      yield { text: `Error connecting to service (${errorMsg}). Please try again.`, sources: [] };
+    }
   }
 };
 
