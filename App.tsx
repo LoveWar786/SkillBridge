@@ -346,6 +346,18 @@ const App: React.FC = () => {
         // Refresh history
         const updatedHistory = await historyService.getUserHistory(user.uid);
         setHistory(updatedHistory);
+
+        // Delete draft if one was used
+        if (currentDraftId) {
+          try {
+            await draftService.deleteDraft(currentDraftId);
+            const updatedDrafts = await draftService.getUserDrafts(user.uid);
+            setDrafts(updatedDrafts);
+            setCurrentDraftId(undefined);
+          } catch (draftError) {
+            console.error("Failed to delete completed draft:", draftError);
+          }
+        }
       } else {
         setCurrentAnalysisId(undefined);
         setCurrentAnalysisHasFeedback(false);
@@ -405,6 +417,7 @@ const App: React.FC = () => {
     setAnalysisCost(item.cost);
     setCurrentAnalysisId(item.id);
     setCurrentAnalysisHasFeedback(!!item.feedback);
+    setCurrentDraftId(undefined);
     setCurrentStep(AppStep.RESULTS);
     navigate('/app');
   };

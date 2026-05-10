@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Square } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Square, Trash2, RotateCcw } from 'lucide-react';
 import ErrorMessage from './ErrorMessage';
+import ConfirmationModal from './ConfirmationModal';
 import { sendChatMessageStream, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
@@ -67,13 +68,10 @@ const SourceList = ({ sources }: { sources: Array<{ title: string; uri: string }
   );
 };
 
-const ChatWidget: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const[messages, setMessages] = useState<ChatMessage[]>([
-    { 
-      id: '1', 
-      role: 'model', 
-      content: `# Welcome to SkillBridge!
+const INITIAL_MESSAGE: ChatMessage = { 
+  id: '1', 
+  role: 'model', 
+  content: `# Welcome to SkillBridge!
 
 Hi! I'm your **Career Assistant**. I can help you navigate your professional journey. Ask me about:
 
@@ -89,12 +87,19 @@ Stay up-to-date with the latest demands in tech, finance, healthcare, and more. 
 I can conduct mock interviews, provide detailed feedback on your answers, and give you actionable tips on how to handle difficult behavioral questions using the STAR method.
 
 Let me know how I can help you today!` 
-    }
-  ]);
+};
+
+const ChatWidget: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const[messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [inputValue, setInputValue] = useState('');
   const[isLoading, setIsLoading] = useState(false);
   const [attachment, setAttachment] = useState<{ type: 'image' | 'file', preview: string, name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Modals state
+  const [isClearAllModalOpen, setIsClearAllModalOpen] = useState(false);
+  const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
   
   // Voice Mode State
   const [isVoiceMode, setIsVoiceMode] = useState(false);
@@ -830,10 +835,23 @@ Let me know how I can help you today!`
     }
   };
 
+  const handleClearChat = () => {
+    setMessages([INITIAL_MESSAGE]);
+    setIsClearAllModalOpen(false);
+  };
+
+  const handleDeleteMessage = () => {
+    if (messageToDelete) {
+      setMessages(prev => prev.filter(m => m.id !== messageToDelete));
+      setMessageToDelete(null);
+    }
+  };
+
   return (
-    <div className="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end pointer-events-none">
-      
-      {isOpen && (
+    <>
+      <div className="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end pointer-events-none">
+        
+        {isOpen && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] border border-slate-200 dark:border-slate-800 mb-4 flex flex-col pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 overflow-hidden">
           {/* Header */}
           <div className="p-3 px-4 bg-blue-600 dark:bg-slate-950 text-white flex justify-between items-center shadow-md z-10">
@@ -849,6 +867,13 @@ Let me know how I can help you today!`
                 </div>
             </div>
             <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => setIsClearAllModalOpen(true)}
+                    className="hover:bg-white/20 p-1.5 rounded transition-colors"
+                    title="Clear Chat History"
+                >
+                    <RotateCcw className="w-4 h-4" />
+                </button>
                 <button 
                     onClick={toggleVoiceMode}
                     className={`p-1.5 rounded-lg transition-colors ${isVoiceMode ? 'bg-white text-blue-600' : 'hover:bg-white/20'}`}
@@ -871,7 +896,8 @@ Let me know how I can help you today!`
 
           {/* Body */}
           {isVoiceMode ? (
-              <div className="flex-1 bg-slate-900 flex flex-col items-center justify-center text-center p-6 space-y-8 relative overflow-hidden">
+              <div className="flex-1 bg-slate-900 overflow-y-auto relative min-h-0">
+                <div className="flex flex-col items-center justify-center text-center p-6 space-y-8 min-h-full">
                   {isLiveConnected && (
                       <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
                           <div className="w-64 h-64 bg-blue-500 rounded-full animate-ping"></div>
@@ -890,7 +916,7 @@ Let me know how I can help you today!`
                       </div>
                   </div>
 
-                  <div className="z-10 px-4">
+                  <div className="z-10 px-4 w-full max-w-sm">
                       {keySelectionRequired ? (
                         <div className="space-y-4">
                            <div className="flex items-center justify-center gap-2 text-amber-400 font-bold mb-1">
@@ -936,7 +962,7 @@ Let me know how I can help you today!`
                            </h3>
                            
                            {isLiveConnected && (
-                             <div className="flex flex-col items-center gap-4 mt-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/10 w-full max-w-[240px]">
+                             <div className="flex flex-col items-center gap-4 mt-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/10 w-full mx-auto">
                                <div className="flex items-center gap-6">
                                  <button
                                    onClick={togglePlayback}
@@ -989,6 +1015,7 @@ Let me know how I can help you today!`
                         {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : isLiveConnected ? 'End Session' : 'Start Talking'}
                     </button>
                   )}
+                </div>
               </div>
           ) : (
             <>
@@ -999,7 +1026,16 @@ Let me know how I can help you today!`
                 className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 dark:bg-slate-950"
               >
                 {messages.map((msg, index) => (
-                  <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div key={msg.id} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'user' && (
+                      <button 
+                        onClick={() => setMessageToDelete(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 transition-all self-center mr-1"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <div className={`max-w-[85%] rounded-2xl p-2.5 text-[13px] ${
                       msg.role === 'user' 
                         ? 'bg-blue-600 text-white rounded-tr-none' 
@@ -1045,6 +1081,15 @@ Let me know how I can help you today!`
                         </div>
                       )}
                     </div>
+                    {msg.role === 'model' && index !== 0 && (
+                      <button 
+                        onClick={() => setMessageToDelete(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 transition-all self-center ml-1"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {isLoading && (
@@ -1127,7 +1172,29 @@ Let me know how I can help you today!`
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
       </button>
-    </div>
+      </div>
+
+      {/* Modals */}
+      <ConfirmationModal
+        isOpen={isClearAllModalOpen}
+        onClose={() => setIsClearAllModalOpen(false)}
+        onConfirm={handleClearChat}
+        title="Clear Chat History"
+        message="Are you sure you want to clear the entire chat history? This will reset the AI's memory and start a new conversation."
+        confirmText="Clear Chat"
+        isDangerous={true}
+      />
+
+      <ConfirmationModal
+        isOpen={!!messageToDelete}
+        onClose={() => setMessageToDelete(null)}
+        onConfirm={handleDeleteMessage}
+        title="Delete Message"
+        message="Are you sure you want to delete this message? The AI will no longer remember it."
+        confirmText="Delete"
+        isDangerous={true}
+      />
+    </>
   );
 };
 
