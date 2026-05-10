@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "Analysis": {
+      "title": "Analysis",
+      "description": "A skill gap analysis result",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "jobRole": { "type": "string" },
+        "companyName": { "type": "string" },
+        "candidateName": { "type": "string" },
+        "experienceYears": { "type": "number" },
+        "result": { "type": "object" },
+        "modelUsed": { "type": "string" },
+        "cost": { "type": "number" },
+        "feedback": { "type": "object" }
+      },
+      "required": ["userId", "timestamp", "jobRole", "result"]
+    },
+    "CreditUsage": {
+      "title": "CreditUsage",
+      "description": "A log of credit usage",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "amount": { "type": "number" },
+        "action": { "type": "string" },
+        "modelUsed": { "type": "string" }
+      },
+      "required": ["userId", "timestamp", "amount", "action"]
+    },
+    "GlobalStats": {
+      "title": "GlobalStats",
+      "description": "Global application statistics",
+      "type": "object",
+      "properties": {
+        "totalAnalyses": { "type": "number" },
+        "totalUsers": { "type": "number" },
+        "cvsParsedToday": { "type": "number" },
+        "activeUsers": { "type": "number" }
+      },
+      "required": ["totalAnalyses", "totalUsers", "cvsParsedToday", "activeUsers"]
+    }
+  },
+  "firestore": {
+    "/analyses/{analysisId}": {
+      "schema": "Analysis",
+      "description": "User analysis results"
+    },
+    "/credit_usage/{usageId}": {
+      "schema": "CreditUsage",
+      "description": "User credit usage logs"
+    },
+    "/stats/{docId}": {
+      "schema": "GlobalStats",
+      "description": "Global application statistics"
+    }
+  }
+}

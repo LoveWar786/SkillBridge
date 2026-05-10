@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250">
+  <defs>
+    <linearGradient id="bridgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06B6D4" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+  
+  <g transform="translate(10, 85)">
+    <!-- Data Bars forming a bridge -->
+    <rect x="0" y="60" width="20" height="60" rx="10" fill="#06B6D4" opacity="0.8"/>
+    <rect x="35" y="35" width="20" height="85" rx="10" fill="#0891B2" opacity="0.85"/>
+    <rect x="70" y="15" width="20" height="105" rx="10" fill="#0284C7" opacity="0.9"/>
+    <rect x="105" y="0" width="20" height="120" rx="10" fill="#0369A1" opacity="0.95"/>
+    <rect x="140" y="15" width="20" height="105" rx="10" fill="#1D4ED8" opacity="0.9"/>
+    <rect x="175" y="35" width="20" height="85" rx="10" fill="#2563EB" opacity="0.85"/>
+    <rect x="210" y="60" width="20" height="60" rx="10" fill="#3B82F6" opacity="0.8"/>
+    
+    <!-- Connecting Arc (The AI Bridge) -->
+    <path d="M 10 60 Q 115 -30 220 60" fill="none" stroke="url(#bridgeGrad)" stroke-width="8" stroke-linecap="round" />
+    
+    <!-- Sparkle / AI Star -->
+    <path d="M 115 -45 L 120 -55 L 130 -60 L 120 -65 L 115 -75 L 110 -65 L 100 -60 L 110 -55 Z" fill="#06B6D4" />
+  </g>
+</svg>

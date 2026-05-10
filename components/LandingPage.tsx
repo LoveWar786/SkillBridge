@@ -3,6 +3,8 @@ import { motion } from 'motion/react';
 import { ArrowRight, FileText, Users, Zap, CheckCircle2, Shield, Sparkles, Moon, Sun, LayoutDashboard, History, LogOut, Settings, Plus, Download, Trash2 } from 'lucide-react';
 import { User } from '../services/authService';
 import { AnalysisHistoryItem } from '../types';
+import { statsService, GlobalStats } from '../services/statsService';
+import Logo from './Logo';
 
 interface LandingPageProps {
   onTryDemo: () => void;
@@ -34,29 +36,22 @@ const LandingPage: React.FC<LandingPageProps> = ({
   onSettingsClick
 }) => {
   // Stats counters
-  const [users, setUsers] = useState(0);
-  const [cvs, setCvs] = useState(0);
+  const [stats, setStats] = useState<GlobalStats>({
+    totalAnalyses: 1250,
+    totalUsers: 850,
+    cvsParsedToday: 45,
+    activeUsers: 12
+  });
 
   useEffect(() => {
-    // Animate counters
-    const duration = 2000;
-    const steps = 60;
-    const interval = duration / steps;
-    
-    let currentStep = 0;
-    const timer = setInterval(() => {
-      currentStep++;
-      setUsers(Math.floor((12450 / steps) * currentStep));
-      setCvs(Math.floor((5230 / steps) * currentStep));
-      
-      if (currentStep >= steps) {
-        clearInterval(timer);
-        setUsers(12450);
-        setCvs(5230);
-      }
-    }, interval);
+    // Subscribe to real stats
+    const unsubscribe = statsService.subscribeToStats((newStats) => {
+      setStats(newStats);
+    });
 
-    return () => clearInterval(timer);
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const formatDate = (timestamp: number) => {
@@ -72,11 +67,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 overflow-hidden relative selection:bg-blue-500/30">
         {/* Navbar for Logged In User */}
         <nav className="relative z-10 container mx-auto px-6 py-6 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Zap className="w-6 h-6 text-white fill-white" />
-            </div>
-            <span className="text-2xl font-bold tracking-tight">SkillBridge</span>
+          <div className="flex items-center">
+            <Logo darkMode={darkMode} size="lg" />
           </div>
           
           <div className="flex items-center gap-4">
@@ -282,12 +274,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-2"
+          className="flex items-center"
         >
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <Zap className="w-6 h-6 text-white fill-white" />
-          </div>
-          <span className="text-2xl font-bold tracking-tight">SkillBridge</span>
+          <Logo darkMode={darkMode} size="lg" />
         </motion.div>
         
         <motion.div 
@@ -331,11 +320,11 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
           
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 leading-[1.1]">
-            Bridge the Gap Between Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Skills</span> and Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400">Dream Job</span>
+            The AI-Powered <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400">Bridge</span> to Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400">Dream Career</span>
           </h1>
           
           <p className="text-lg md:text-xl text-slate-600 dark:text-slate-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-            Upload your CV, select your target role, and let our deep-thinking AI analyze your employability, identify skill gaps, and provide actionable career paths.
+            SkillBridge uses advanced reasoning AI to analyze your professional profile against real-world job requirements, pinpointing exactly what you need to master to land your next big role.
           </p>
           
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -368,7 +357,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
             <h3 className="text-4xl font-black text-slate-900 dark:text-white mb-2">
-              {users.toLocaleString()}+
+              {stats.totalUsers.toLocaleString()}
             </h3>
             <p className="text-slate-500 dark:text-slate-400 font-medium">Active Users</p>
           </div>
@@ -378,9 +367,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
             <h3 className="text-4xl font-black text-slate-900 dark:text-white mb-2">
-              {cvs.toLocaleString()}+
+              {stats.totalAnalyses.toLocaleString()}
             </h3>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">CVs Parsed Daily</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Analyses Performed</p>
           </div>
 
           <div className="p-6 rounded-3xl bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200/50 dark:border-slate-800/50 shadow-xl shadow-slate-200/20 dark:shadow-none">
@@ -398,9 +387,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
       {/* Footer / Credits */}
       <footer className="relative z-10 border-t border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 backdrop-blur-lg py-8">
         <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-blue-600 dark:text-blue-500" />
-            <span className="font-bold text-slate-900 dark:text-white">SkillBridge</span>
+          <div className="flex items-center">
+            <Logo darkMode={darkMode} size="md" />
           </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
             Built with ❤️ by SkillBridge Team

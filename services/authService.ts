@@ -15,8 +15,9 @@ import {
   signInWithPopup,
   GoogleAuthProvider
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion, deleteDoc, increment } from 'firebase/firestore';
 import { emailService } from './emailService';
+import { statsService } from './statsService';
 
 export interface PurchaseRecord {
   id: string;
@@ -219,6 +220,9 @@ export const authService = {
       lastVisited: now
     });
 
+    // Increment global user count
+    statsService.incrementUsers().catch(console.error);
+
     return newUser;
   },
 
@@ -257,6 +261,9 @@ export const authService = {
       lastLogin: now,
       lastVisited: now
     });
+
+    // Increment global user count
+    statsService.incrementUsers().catch(console.error);
 
     return newUser;
   },
