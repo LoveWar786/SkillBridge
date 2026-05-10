@@ -327,7 +327,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium mb-8 border border-blue-200 dark:border-blue-800/50">
             <Sparkles className="w-4 h-4" />
-            <span>Powered by Advanced AI Reasoning</span>
+            <span>Powered by Advanced Gemini 3.0 & 3.1 Reasoning</span>
           </div>
           
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-8 leading-[1.1]">

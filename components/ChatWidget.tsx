@@ -1,23 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import ErrorMessage from './ErrorMessage';
-import { sendChatMessage, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
+import { sendChatMessageStream, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
 import { ChatMessage } from '../types';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { jsPDF } from "jspdf";
+import ReactMarkdown from 'react-markdown';
 
+// --- ROBUST MARKDOWN FOR UI ---
 const SimpleMarkdown = ({ text }: { text: string }) => {
-  // Simple parser for **bold** and *list items
-  const parts = text.split(/(\*\*.*?\*\*)/g);
   return (
-    <span>
-      {parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={i}>{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      })}
-    </span>
+    <div className="markdown-content text-sm leading-relaxed">
+      <ReactMarkdown
+        components={{
+          h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-3 mb-1 text-inherit" {...props} />,
+          h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-2 mb-1 text-inherit" {...props} />,
+          h3: ({node, ...props}) => <h3 className="text-base font-bold mt-2 mb-1 text-inherit" {...props} />,
+          ul: ({node, ...props}) => <ul className="list-disc ml-5 mt-1 mb-2 text-inherit space-y-1" {...props} />,
+          ol: ({node, ...props}) => <ol className="list-decimal ml-5 mt-1 mb-2 text-inherit space-y-1" {...props} />,
+          li: ({node, ...props}) => <li className="mb-0 text-inherit" {...props} />,
+          p: ({node, ...props}) => <p className="mb-2 last:mb-0 text-inherit" {...props} />,
+          strong: ({node, ...props}) => <strong className="font-bold text-inherit" {...props} />,
+          em: ({node, ...props}) => <em className="italic text-inherit" {...props} />,
+          code: ({node, ...props}) => <code className="bg-black/20 rounded px-1 py-0.5 font-mono text-[0.85em] text-inherit" {...props} />,
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
   );
 };
 
@@ -59,18 +69,37 @@ const SourceList = ({ sources }: { sources: Array<{ title: string; uri: string }
 
 const ChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: '1', role: 'model', content: "Hi! I'm your career assistant. Ask me about industry trends, salary expectations, or skills you should learn!" }
+  const[messages, setMessages] = useState<ChatMessage[]>([
+    { 
+      id: '1', 
+      role: 'model', 
+      content: `# Welcome to SkillBridge!
+
+Hi! I'm your **Career Assistant**. I can help you navigate your professional journey. Ask me about:
+
+## Industry Trends
+Stay up-to-date with the latest demands in tech, finance, healthcare, and more. Discover which roles are growing rapidly and which skills are becoming obsolete in today's fast-paced market.
+
+### Key Areas of Focus:
+-   Artificial Intelligence & Machine Learning
+-   Cloud Computing Architecture
+-   Data Science and Analytics
+
+## Interview Preparation
+I can conduct mock interviews, provide detailed feedback on your answers, and give you actionable tips on how to handle difficult behavioral questions using the STAR method.
+
+Let me know how I can help you today!` 
+    }
   ]);
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const[isLoading, setIsLoading] = useState(false);
   const [attachment, setAttachment] = useState<{ type: 'image' | 'file', preview: string, name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Voice Mode State
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
-  const [keySelectionRequired, setKeySelectionRequired] = useState(false);
+  const[isVoiceMode, setIsVoiceMode] = useState(false);
+  const[isLiveConnected, setIsLiveConnected] = useState(false);
+  const[keySelectionRequired, setKeySelectionRequired] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   
   // Audio Refs
@@ -78,24 +107,37 @@ const ChatWidget: React.FC = () => {
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const sessionRef = useRef<any>(null); // Live session
+  const sessionRef = useRef<any>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isScrolledUpRef = useRef(false);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      isScrolledUpRef.current = !isAtBottom;
+    }
+  };
+
+  const scrollToBottom = (force = false) => {
+    if (!isScrolledUpRef.current || force) {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isOpen]);
+  },[messages, isOpen]);
 
-  // Clean up audio contexts on unmount
   useEffect(() => {
     return () => {
       disconnectLiveSession();
     };
-  }, []);
+  },[]);
 
   const handleSend = async () => {
     if ((!inputValue.trim() && !attachment) || isLoading) return;
@@ -107,7 +149,7 @@ const ChatWidget: React.FC = () => {
       attachment: attachment ? { name: attachment.name, preview: attachment.preview, type: attachment.type } : undefined
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev =>[...prev, userMsg]);
     setInputValue('');
     const currentAttachment = attachment;
     setAttachment(null);
@@ -116,19 +158,37 @@ const ChatWidget: React.FC = () => {
     const history = messages.map(m => ({ role: m.role, content: m.content }));
     
     try {
-      const response = await sendChatMessage(history, userMsg.content, currentAttachment || undefined);
+      // INSTRUCT THE AI TO VERIFY IF THE DOCUMENT IS CAREER-RELATED
+      let apiContent = userMsg.content;
+      if (currentAttachment) {
+          const aiGuidance = "\n\n[SYSTEM INSTRUCTION: Analyze the attached file or image. If it is NOT related to careers, resumes, jobs, portfolios, or professional development, politely refuse to process it and inform the user that you can only assist with career-related documents. If it IS career-related, proceed normally with the user's request.]";
+          apiContent = apiContent ? apiContent + aiGuidance : aiGuidance.trim();
+      }
+
+      const stream = sendChatMessageStream(history, apiContent, currentAttachment || undefined);
       
-      const botMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'model',
-        content: response.text,
-        sources: response.sources
-      };
+      const botMsgId = (Date.now() + 1).toString();
+      setMessages(prev =>[...prev, { id: botMsgId, role: 'model', content: '', sources: [] }]);
       
-      setMessages(prev => [...prev, botMsg]);
-    } catch (e) {
+      isScrolledUpRef.current = false;
+      setTimeout(() => scrollToBottom(true), 50);
+
+      for await (const chunk of stream) {
+          setMessages(prev => prev.map(m => 
+              m.id === botMsgId ? { ...m, content: chunk.text, sources: chunk.sources } : m
+          ));
+          scrollToBottom();
+      }
+    } catch (e: any) {
       console.error(e);
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: "Sorry, I'm having trouble connecting right now." }]);
+      let errorMessage = "Sorry, I'm having trouble connecting right now.";
+      const errorString = JSON.stringify(e);
+      if (e.message?.includes("429") || errorString.includes("429") || e.status === 429 || errorString.includes("RESOURCE_EXHAUSTED")) {
+        errorMessage = "The AI service is currently busy (Rate Limit Exceeded). Please wait a few seconds and try again.";
+      } else if (e.message) {
+        errorMessage = `Sorry, I'm having trouble connecting right now (${e.message}).`;
+      }
+      setMessages(prev =>[...prev, { id: Date.now().toString(), role: 'model', content: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
@@ -151,6 +211,7 @@ const ChatWidget: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // --- PDF MARKDOWN & LAYOUT ENGINE ---
   const handleDownloadChat = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -158,153 +219,289 @@ const ChatWidget: React.FC = () => {
     const margin = 20;
     let yPos = 20;
 
-    // --- Helpers ---
-    const drawZapIcon = (x: number, y: number, size: number, color: [number, number, number]) => {
+    const drawZapIcon = (x: number, y: number, size: number, color:[number, number, number]) => {
         doc.setFillColor(color[0], color[1], color[2]);
         const s = size / 24;
-        // Lucide Zap: 13,2 13,10 19,10 11,22 11,14 5,14
-        // Split into triangles for PDF
-        // Top part
         doc.triangle(x + 13*s, y + 2*s, x + 13*s, y + 10*s, x + 5*s, y + 14*s, 'F');
-        // Bottom part
         doc.triangle(x + 13*s, y + 10*s, x + 19*s, y + 10*s, x + 11*s, y + 22*s, 'F');
-        // Middle overlap fix (optional, but keeps shape clean)
         doc.triangle(x + 13*s, y + 10*s, x + 5*s, y + 14*s, x + 11*s, y + 14*s, 'F'); 
     };
 
-    // --- Dark Theme Setup ---
-    const bgR = 15, bgG = 23, bgB = 42; // Slate 900
-    const textR = 255, textG = 255, textB = 255; // White
+    // Dark Theme Colors
+    const bgR = 15, bgG = 23, bgB = 42; 
+    const textR = 255, textG = 255, textB = 255; 
     
-    // Fill Page Background
+    // Background
     doc.setFillColor(bgR, bgG, bgB);
     doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-    // --- Header ---
-    // Logo
-    drawZapIcon(margin, 15, 20, [59, 130, 246]); // Blue 500
+    // Header
+    drawZapIcon(margin, 15, 20,[59, 130, 246]);
 
-    // App Name
     doc.setTextColor(textR, textG, textB);
     doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
     doc.text("SkillBridge", margin + 25, 28);
 
-    // Subtitle
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(148, 163, 184); // Slate 400
+    doc.setTextColor(148, 163, 184); 
     doc.text("Career Chat History", margin + 25, 36);
 
-    // Date (Right Aligned)
     doc.setFontSize(10);
     doc.text(new Date().toLocaleDateString(), pageWidth - margin, 28, { align: 'right' });
     
-    // Divider
-    doc.setDrawColor(51, 65, 85); // Slate 700
+    doc.setDrawColor(51, 65, 85); 
     doc.setLineWidth(0.5);
     doc.line(margin, 45, pageWidth - margin, 45);
 
     yPos = 60;
 
+    // --- MARKDOWN PROCESSOR FOR JSPDF ---
+    const processMarkdown = (text: string, maxWidth: number) => {
+        const blocks = text.split('\n');
+        const layout: any[] =[];
+
+        blocks.forEach(block => {
+            let type = 'p';
+            let content = block.trim();
+            if (content === '') {
+                layout.push({ type: 'spacer', height: 4 });
+                return;
+            }
+
+            let indent = 0;
+            let fontSize = 10;
+            let forceBold = false;
+            let prefix = '';
+
+            // Block Level Parsing
+            if (content.startsWith('### ')) { type = 'h3'; content = content.slice(4); fontSize = 12; forceBold = true; }
+            else if (content.startsWith('## ')) { type = 'h2'; content = content.slice(3); fontSize = 14; forceBold = true; }
+            else if (content.startsWith('# ')) { type = 'h1'; content = content.slice(2); fontSize = 16; forceBold = true; }
+            else if (content.match(/^[-*] /)) { type = 'bullet'; content = content.slice(2); indent = 5; prefix = '• '; }
+            else if (content.match(/^\d+\. /)) {
+                const match = content.match(/^(\d+\. )/);
+                type = 'numbered';
+                indent = 5;
+                if (match) {
+                    prefix = match[1];
+                    content = content.slice(match[1].length);
+                }
+            }
+
+            // Inline Parsing (Bold, Italic, Code)
+            const tokens = content.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g).filter(Boolean).map(t => {
+                if (t.startsWith('**') && t.endsWith('**')) return { text: t.slice(2, -2), font: 'bold' };
+                if (t.startsWith('*') && t.endsWith('*')) return { text: t.slice(1, -1), font: 'italic' };
+                if (t.startsWith('`') && t.endsWith('`')) return { text: t.slice(1, -1), font: 'courier' };
+                return { text: t, font: 'normal' };
+            });
+
+            if (forceBold) tokens.forEach(t => t.font = 'bold');
+
+            // Set up environment to accurately measure text width
+            doc.setFont("helvetica", forceBold ? "bold" : "normal");
+            doc.setFontSize(fontSize);
+            const prefixWidth = prefix ? doc.getTextWidth(prefix) : 0;
+            const activeMaxWidth = maxWidth - indent - prefixWidth;
+            
+            const lineHeight = fontSize * 0.352778 * 1.4; // standard proportional line height
+            let currentLine: any[] =[];
+            let currentLineWidth = 0;
+
+            // Word wrap engine
+            tokens.forEach(token => {
+                const fontName = token.font === 'courier' ? 'courier' : 'helvetica';
+                const fontStyle = ['bold', 'italic'].includes(token.font) ? token.font : 'normal';
+                doc.setFont(fontName, fontStyle);
+                doc.setFontSize(fontSize);
+
+                const words: string[] = token.text.match(/(\S+|\s+)/g) ||[];
+
+                words.forEach(word => {
+                    const w = doc.getTextWidth(word);
+                    // Wrap to next line if width exceeded
+                    if (currentLineWidth + w > activeMaxWidth && currentLineWidth > 0 && word.trim() !== '') {
+                        layout.push({ type, segments: currentLine, height: lineHeight, indent, prefix, fontSize, forceBold });
+                        currentLine =[{ text: word.replace(/^\s+/, ''), font: token.font }];
+                        currentLineWidth = doc.getTextWidth(currentLine[0].text);
+                        prefix = ''; // Prefix applies only to the first line
+                    } else {
+                        currentLine.push({ text: word, font: token.font });
+                        currentLineWidth += w;
+                    }
+                });
+            });
+
+            if (currentLine.length > 0) {
+                layout.push({ type, segments: currentLine, height: lineHeight, indent, prefix, fontSize, forceBold });
+            }
+
+            layout.push({ type: 'spacer', height:['h1','h2','h3'].includes(type) ? 4 : 2 });
+        });
+
+        if (layout.length > 0 && layout[layout.length - 1].type === 'spacer') layout.pop();
+        return layout;
+    };
+
     messages.forEach((msg) => {
         const isUser = msg.role === 'user';
-        const bubbleMaxWidth = (pageWidth - (margin * 2)) * 0.75; // 75% width
+        const bubbleMaxWidth = (pageWidth - (margin * 2)) * 0.75; 
         
-        // Prepare Text
-        const cleanContent = msg.content.replace(/\*\*/g, '');
-        const lines = doc.splitTextToSize(cleanContent, bubbleMaxWidth - 10);
-        let contentHeight = (lines.length * 5) + 20; // + padding
-
-        // Calculate Sources Height
-        let sourcesHeight = 0;
-        if (msg.sources && msg.sources.length > 0) {
-            sourcesHeight = 10 + (msg.sources.length * 5); // Header + Divider + Items
-            contentHeight += sourcesHeight;
+        // Ensure File attachments are explicitly visible in the PDF
+        let pdfTextContent = msg.content || "";
+        if (msg.attachment) {
+            const attachmentString = `**[File Attachment: ${msg.attachment.name}]**`;
+            pdfTextContent = pdfTextContent ? `${pdfTextContent}\n\n${attachmentString}` : attachmentString;
         }
 
-        // Check for new page
-        if (yPos + contentHeight > pageHeight - 20) {
-            doc.addPage();
-            doc.setFillColor(bgR, bgG, bgB);
-            doc.rect(0, 0, pageWidth, pageHeight, 'F'); // Re-fill background
-            yPos = 30;
-        }
-
-        // Calculate X Position
-        // User = Right aligned
-        // AI = Left aligned
-        const xPos = isUser ? (pageWidth - margin - bubbleMaxWidth) : margin;
-
-        // Draw Bubble Background
-        if (isUser) {
-            doc.setFillColor(37, 99, 235); // Blue 600
-            doc.setDrawColor(29, 78, 216); // Blue 700
-        } else {
-            doc.setFillColor(30, 41, 59); // Slate 800
-            doc.setDrawColor(51, 65, 85); // Slate 700
-        }
+        const layoutLines = processMarkdown(pdfTextContent, bubbleMaxWidth - 10);
         
-        // Rounded Rect with specific corners based on speaker
-        doc.roundedRect(xPos, yPos, bubbleMaxWidth, contentHeight, 3, 3, 'FD');
+        let remainingLayout = [...layoutLines];
+        let remainingSources = msg.sources ?[...msg.sources] :[];
+        let isFirstPart = true;
 
-        // Role Label
-        doc.setFontSize(8);
-        doc.setFont("helvetica", "bold");
-        if (isUser) {
-            doc.setTextColor(191, 219, 254); // Blue 200
-            doc.text("ME", xPos + 5, yPos + 8);
-        } else {
-            doc.setTextColor(148, 163, 184); // Slate 400
-            doc.text("AI ASSISTANT", xPos + 5, yPos + 8);
-        }
-
-        // Content
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(255, 255, 255); // White text for both in dark mode
-        doc.text(lines, xPos + 5, yPos + 16);
-
-        // Sources (Expanded)
-        if (msg.sources && msg.sources.length > 0) {
-            let sourceY = yPos + 16 + (lines.length * 5) + 4;
+        // Loop handles splitting long bubbles dynamically across pages
+        while (remainingLayout.length > 0 || remainingSources.length > 0) {
+            let availableHeight = pageHeight - 20 - yPos;
             
-            // Divider (Subtle line)
-            doc.setDrawColor(255, 255, 255); // White
-            doc.setLineWidth(0.1);
-            // Draw line with opacity simulation (thin line)
-            doc.line(xPos + 5, sourceY, xPos + bubbleMaxWidth - 5, sourceY);
+            let minRequiredHeight = 16; // 8 top + 8 bottom padding
+            if (isFirstPart) minRequiredHeight += 8; // ME / AI Label
             
-            sourceY += 5;
+            if (remainingLayout.length > 0) {
+                minRequiredHeight += remainingLayout[0].height;
+            } else if (remainingSources.length > 0) {
+                minRequiredHeight += 15; // Sources label + 1 source
+            }
 
-            // Header
-            doc.setFontSize(7);
-            doc.setFont("helvetica", "bold");
-            doc.setTextColor(148, 163, 184); // Slate 400
-            doc.text("SOURCES:", xPos + 5, sourceY);
-            
-            sourceY += 4;
+            // Flip to new page if not enough space
+            if (availableHeight < minRequiredHeight) {
+                doc.addPage();
+                doc.setFillColor(bgR, bgG, bgB);
+                doc.rect(0, 0, pageWidth, pageHeight, 'F'); 
+                yPos = 30;
+                availableHeight = pageHeight - 20 - yPos;
+            }
 
-            // List
-            doc.setFontSize(8);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(96, 165, 250); // Blue 400 (Link color)
+            let linesToFit: any[] = [];
+            let sourcesToFit: any[] =[];
             
-            msg.sources.forEach(source => {
-                const sourceTitle = `• ${source.title}`;
-                // Truncate if too long to fit in one line
-                // bubbleMaxWidth - 10 (padding)
-                // Approximate char width for helvetica 8 is ~3-4px
-                // Let's just use splitTextToSize to be safe, take first line
-                const truncatedTitle = doc.splitTextToSize(sourceTitle, bubbleMaxWidth - 10);
-                
-                // Add link annotation
-                doc.textWithLink(truncatedTitle[0], xPos + 5, sourceY, { url: source.uri });
-                sourceY += 5;
+            let currentHeight = 16; 
+            if (isFirstPart) currentHeight += 8;
+
+            while (remainingLayout.length > 0) {
+                if (currentHeight + remainingLayout[0].height > availableHeight) break;
+                const line = remainingLayout.shift();
+                linesToFit.push(line);
+                currentHeight += line.height;
+            }
+
+            if (remainingLayout.length === 0 && remainingSources.length > 0) {
+                let sourceHeaderNeeded = 10; 
+                if (currentHeight + sourceHeaderNeeded + 5 <= availableHeight) {
+                    let headerAdded = false;
+                    while (remainingSources.length > 0) {
+                        if (!headerAdded) {
+                            currentHeight += sourceHeaderNeeded;
+                            headerAdded = true;
+                        }
+                        if (currentHeight + 5 > availableHeight) break;
+                        sourcesToFit.push(remainingSources.shift());
+                        currentHeight += 5;
+                    }
+                }
+            }
+
+            const xPos = isUser ? (pageWidth - margin - bubbleMaxWidth) : margin;
+
+            // Draw Bubble
+            if (isUser) {
+                doc.setFillColor(37, 99, 235); 
+                doc.setDrawColor(29, 78, 216); 
+            } else {
+                doc.setFillColor(30, 41, 59); 
+                doc.setDrawColor(51, 65, 85); 
+            }
+            doc.roundedRect(xPos, yPos, bubbleMaxWidth, currentHeight, 3, 3, 'FD');
+
+            let textY = yPos + 8;
+
+            // Draw speaker label
+            if (isFirstPart) {
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "bold");
+                if (isUser) {
+                    doc.setTextColor(191, 219, 254); 
+                    doc.text("ME", xPos + 5, textY);
+                } else {
+                    doc.setTextColor(148, 163, 184); 
+                    doc.text("AI ASSISTANT", xPos + 5, textY);
+                }
+                textY += 6; 
+            }
+
+            textY += 3; // Nudge to text baseline
+
+            // Draw Markdown Lines
+            doc.setTextColor(255, 255, 255); 
+            linesToFit.forEach(line => {
+                if (line.type === 'spacer') {
+                    textY += line.height;
+                    return;
+                }
+
+                let currentX = xPos + 5 + (line.indent || 0);
+
+                if (line.prefix) {
+                    doc.setFont("helvetica", line.forceBold ? "bold" : "normal");
+                    doc.setFontSize(line.fontSize || 10);
+                    doc.text(line.prefix, currentX, textY);
+                    currentX += doc.getTextWidth(line.prefix);
+                }
+
+                line.segments.forEach((seg: any) => {
+                    const fontName = seg.font === 'courier' ? 'courier' : 'helvetica';
+                    const fontStyle = ['bold', 'italic'].includes(seg.font) ? seg.font : 'normal';
+                    doc.setFont(fontName, fontStyle);
+                    doc.setFontSize(line.fontSize || 10);
+                    
+                    doc.text(seg.text, currentX, textY);
+                    currentX += doc.getTextWidth(seg.text);
+                });
+
+                textY += line.height;
             });
-        }
 
-        yPos += contentHeight + 8;
+            // Draw Sources
+            if (sourcesToFit.length > 0) {
+                textY += 2;
+                
+                doc.setDrawColor(255, 255, 255); 
+                doc.setLineWidth(0.1);
+                doc.line(xPos + 5, textY - 3, xPos + bubbleMaxWidth - 5, textY - 3);
+                
+                doc.setFontSize(7);
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(148, 163, 184); 
+                doc.text("SOURCES:", xPos + 5, textY);
+                
+                textY += 4;
+
+                doc.setFontSize(8);
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(96, 165, 250); 
+                
+                sourcesToFit.forEach(source => {
+                    const truncatedTitle = doc.splitTextToSize(`• ${source.title}`, bubbleMaxWidth - 10);
+                    doc.textWithLink(truncatedTitle[0], xPos + 5, textY, { url: source.uri });
+                    textY += 5;
+                });
+            }
+
+            yPos += currentHeight + 6; // Margin between chunks/bubbles
+            isFirstPart = false;
+        }
     });
 
     // Footer
@@ -312,16 +509,13 @@ const ChatWidget: React.FC = () => {
     for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
-        doc.setTextColor(71, 85, 105); // Slate 600
+        doc.setTextColor(71, 85, 105); 
         doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
         doc.text("SkillBridge AI Career Assistant", margin, pageHeight - 10);
     }
 
-    doc.save("SkillBridge_Chat_History.pdf");
+    doc.save(`SkillBridge_Chat_${new Date().toISOString().slice(0,10)}.pdf`);
   };
-
-  // --- Live API Logic ---
-  // ... (rest of the component remains same)
 
   const handleSelectKey = async () => {
     try {
@@ -329,7 +523,7 @@ const ChatWidget: React.FC = () => {
         await window.aistudio.openSelectKey();
         setKeySelectionRequired(false);
         setLiveError(null);
-        connectLiveSession(true); // Automatically proceed after selection attempt
+        connectLiveSession(true); 
       }
     } catch (e) {
       console.error("Failed to open key selection", e);
@@ -343,24 +537,8 @@ const ChatWidget: React.FC = () => {
       setLiveError(null);
       setIsLoading(true);
 
-      // Rule: Verify API key selection for premium models
-      // User requested to bypass paid key check
-      /*
-      if (!shouldSkip && window.aistudio?.hasSelectedApiKey) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-          setKeySelectionRequired(true);
-          setIsLoading(false);
-          return;
-        }
-      }
-      */
-
-      // Create new client instance right before connection as per instructions
-      // Using GEMINI_API_KEY to ensure we use the environment key if available (free tier support)
       const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
       
-      // Initialize Contexts
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
@@ -395,7 +573,6 @@ const ChatWidget: React.FC = () => {
                 int16[i] = inputData[i] * 32768;
               }
               
-              // Manual base64 encoding as per requirement
               let binary = '';
               const bytes = new Uint8Array(int16.buffer);
               const len = bytes.byteLength;
@@ -452,11 +629,7 @@ const ChatWidget: React.FC = () => {
           },
           onerror: (err: any) => {
              console.error("Live API Error", err);
-             // Handle generic Network Error or specific missing entity
              const errorMessage = err?.message || "Connection failed. Please check your internet or API project status.";
-             // if (errorMessage.includes("Requested entity was not found")) {
-             //     setKeySelectionRequired(true);
-             // }
              setLiveError(errorMessage);
              setIsLiveConnected(false);
              setIsLoading(false);
@@ -517,7 +690,7 @@ const ChatWidget: React.FC = () => {
                 <div className="flex flex-col">
                     <span className="font-bold text-sm">{isVoiceMode ? 'Live Career Talk' : 'Career Assistant'}</span>
                     <span className="text-[10px] text-blue-100 opacity-90 font-medium">
-                        {isVoiceMode ? 'Gemini 2.5 Flash Audio (12-2025)' : 'Gemini 3.0 Flash'}
+                        {isVoiceMode ? 'Gemini 2.5 Flash Audio' : 'Gemini 2.5 Flash'}
                     </span>
                 </div>
             </div>
@@ -633,7 +806,11 @@ const ChatWidget: React.FC = () => {
           ) : (
             <>
               {/* Text Chat Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950">
+              <div 
+                ref={messagesContainerRef}
+                onScroll={handleScroll}
+                className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 dark:bg-slate-950"
+              >
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${
@@ -641,9 +818,9 @@ const ChatWidget: React.FC = () => {
                         ? 'bg-blue-600 text-white rounded-tr-none' 
                         : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none shadow-sm'
                     }`}>
-                      <p className={`whitespace-pre-wrap ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                      <div className={`whitespace-pre-wrap ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
                           <SimpleMarkdown text={msg.content} />
-                      </p>
+                      </div>
                       
                       {msg.attachment && (
                         <div className={`mt-2 p-2 rounded-lg flex items-center gap-2 ${msg.role === 'user' ? 'bg-blue-700' : 'bg-slate-100 dark:bg-slate-700'}`}>

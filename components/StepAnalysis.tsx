@@ -453,7 +453,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     doc.text("Critical Skill Gaps", margin + 16, yPos + 9.5);
     yPos += 16;
 
-    result.skillGaps.forEach(gap => {
+    if (Array.isArray(result.skillGaps)) {
+      result.skillGaps.forEach(gap => {
         const fullWidth = pageWidth - (margin * 2);
         const reasonLines = doc.splitTextToSize(gap.reason, fullWidth - 30);
         const cardHeight = 24 + (reasonLines.length * 5);
@@ -503,6 +504,7 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
 
         yPos += cardHeight + 4;
     });
+    }
 
     yPos += 8;
 
@@ -524,7 +526,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     doc.text("Recommended Learning Path", margin + 16, yPos + 9.5);
     yPos += 16;
 
-    result.learningPath.forEach((step, i) => {
+    if (Array.isArray(result.learningPath)) {
+      result.learningPath.forEach((step, i) => {
         const fullWidth = pageWidth - (margin * 2);
         const descLines = doc.splitTextToSize(step.description, fullWidth - 30);
         
@@ -600,7 +603,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         doc.text(step.resourceSuggestion, margin + 34, boxY + 18);
 
         yPos += cardHeight + 4;
-    });
+      });
+    }
 
     yPos += 8;
     
@@ -641,7 +645,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
     
     yPos += 18;
 
-    sortedRoles.forEach(role => {
+    if (Array.isArray(sortedRoles)) {
+      sortedRoles.forEach(role => {
         const matchLines = doc.splitTextToSize(role.matchReason, fullWidth - 30);
         const cardHeight = 28 + (matchLines.length * 5);
 
@@ -684,7 +689,8 @@ const StepAnalysis: React.FC<StepAnalysisProps> = ({ result, candidateName, expe
         doc.text(matchLines, margin + 14, yPos + 22);
 
         yPos += cardHeight + 4;
-    });
+      });
+    }
 
     const filename = `SkillBridge Analysis ${candidateName || 'User'}.pdf`;
     doc.save(filename);
