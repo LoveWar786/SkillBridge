@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import { initializeApp, cert, getApp, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { sendChatMessageStream, analyzeJobReadiness, parseCV, generateSpeech } from "./services/geminiService";
 
@@ -21,15 +21,15 @@ async function startServer() {
 
   app.use(express.json());
 
-  app.get("/api/health", (req, res) => {
+  app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
   // Gemini Proxy Routes
   app.post("/api/chat", async (req, res) => {
     try {
-      const { history, newMessage, attachment } = req.body;
-      const stream = sendChatMessageStream(history, newMessage, attachment);
+      const { history, newMessage, attachment, enableSearchGrounding } = req.body;
+      const stream = sendChatMessageStream(history, newMessage, attachment, enableSearchGrounding);
       let finalResult = { text: "", sources: [] };
       for await (const chunk of stream) {
           finalResult = chunk;
@@ -75,7 +75,7 @@ async function startServer() {
   });
 
   // Stats Endpoint
-  app.get("/api/stats", async (req, res) => {
+  app.get("/api/stats", async (_req, res) => {
     try {
       const db = getFirestore();
       
@@ -113,7 +113,7 @@ async function startServer() {
     app.use(express.static(distPath));
     
     // SPA Fallback: Serve index.html for any route that doesn't match an API or static file
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.resolve(distPath, "index.html"));
     });
   }

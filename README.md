@@ -9,12 +9,14 @@
 
 <p align="center">
   <b>An AI-powered skill gap analysis platform and 24/7 career coach.</b><br>
-  <i>Compare your skills against job descriptions, get explainable readiness insights, and receive real-time career guidance.</i>
+  <i>Compare your skills against job descriptions, get explainable readiness insights, and receive real-time career guidance.</i><br>
+  <br>
+  🔗 <b>Live Demo:</b> <a href="https://skillbridge-prod.vercel.app/">skillbridge-prod.vercel.app</a>
 </p>
 
 ---
 
-## Overview
+## 📖 Overview
 
 **SkillBridge** is an open-source, end-to-end employability platform designed to solve a critical issue in today's job market: the "ATS Black Hole" and the high cost of professional career coaching. 
 
@@ -22,19 +24,20 @@ In a world where hundreds of resumes are submitted for a single role, standing o
 
 But it doesn't stop at scoring. SkillBridge generates a **highly personalized, step-by-step learning roadmap** to help you bridge your specific skill gaps. Whether you are a recent graduate trying to land your first tech role, a professional pivoting to a new industry, or a senior engineer aiming for staff level, SkillBridge gives you the actionable insights you need to upskill efficiently.
 
-### Why SkillBridge?
+### ✨ Why SkillBridge?
 * **Stop Guessing:** Get concrete data on why your resume might be getting rejected.
-* **Upskill Smartly:** Don't learn everything - learn exactly what the job description is asking for.
+* **Upskill Smartly:** Don't learn everything—learn exactly what the job description is asking for.
 * **Ace the Interview:** Use the built-in AI Voice Interviewer to practice your pitch in real-time.
 * **Own Your Growth:** Save your analysis drafts, track your progress over time, and export your roadmaps to PDF.
 
---- 
-
 ## Features
 - **Intelligent Document Parsing:** Seamlessly extract text from uploaded resumes (PDF & DOCX) and custom job descriptions.
-- **Save & Resume Drafts:** Never lose your progress. Save your analysis at any stage and resume it later from your dashboard.
+- **Save & Manage Drafts:** Never lose your progress. Save your analysis at any stage, manage your drafts, and easily resume or delete them from your dashboard.
+- **Analysis History & Tracking:** Automatically securely log your history with option to delete analyses.
+- **Credit Engine:** Custom credit usage and purchase flows powered by seamless token tracking.
+- **Community Testimonials:** Full mobile-responsive UI with user testimonials from successful candidates, stored in Firebase.
 - **Shareable Analysis Results:** Generate unique links to share your readiness reports and career roadmaps with mentors or recruiters.
-- **Interactive AI Career Coach:** A built-in chat widget for contextual career advice, salary trends, and resume tips with Search Grounding.
+- **Interactive AI Career Coach:** A built-in chat widget for contextual career advice, salary trends, and resume tips with Search Grounding. Manage your conversations easily with the ability to delete individual messages, clear your entire chat history to reset the AI's memory, and enjoy a fully scrollable Voice Mode interface.
 - **Explainable Readiness Scoring:** Calculates an accurate job-fit metric based on advanced AI reasoning.
 - **Personalized Learning Roadmap:** Generates a step-by-step, actionable study plan tailored to your specific skill gaps.
 - **Exportable PDF Reports:** Download high-quality, professionally formatted PDF reports of your analysis.
@@ -52,7 +55,7 @@ But it doesn't stop at scoring. SkillBridge generates a **highly personalized, s
 - **UI Iconography:** Lucide-React
 
 ## Architecture
-The SkillBridge architecture follows a modern full-stack pipeline. The React frontend handles local document parsing and UI state, while the Node.js/Express backend securely manages API requests, Firebase authentication, and credit tracking before interfacing with the Google GenAI models.
+The SkillBridge architecture follows a modern full-stack pipeline. The React frontend handles local document parsing, state management, and UI, while the Node.js/Express backend securely constructs API requests for Firebase, tracks platform statistics, and directly proxy interfaces with Google's GenAI models.
 
 ```mermaid
 graph TD;
@@ -63,17 +66,20 @@ graph TD;
         UI[Dashboard & Roadmap UI]
         Export[jsPDF Export]
         Share[Shareable Links]
+        Credits[Credit & Flow Management]
     end
 
     subgraph Server [Backend - Node.js/Express]
-        API[Express API Gateway]
-        Credits[Credit Management]
+        API[Express API Gateway & Proxy]
+        Stats[Stats Aggregation]
+        Vite[Development Server / Static Server]
     end
 
     subgraph Database [Firebase]
         Auth[(Firebase Auth)]
-        DB[(Firestore)]
-        Drafts[(Drafts Collection)]
+        DB[(Firestore - User Data)]
+        Drafts[(Firestore - Drafts)]
+        History[(Firestore - History)]
     end
 
     subgraph AI [Google GenAI]
@@ -84,29 +90,33 @@ graph TD;
         G_Live{Gemini Live API}
     end
 
-    %% Authentication & Credits
-    Client <-->|Login / Token| Auth
-    API <-->|Verify & Deduct| DB
+    %% Authentication & Database
+    Client <-->|Login / Session| Auth
     UI <-->|Save/Resume| Drafts
+    UI <-->|Log Analysis| History
+    Credits <-->|Verify & Deduct| DB
 
     %% Core Analysis Flow
-    B -->|Payload| API
-    C -->|Payload| API
-    API --> Credits
-    Credits -->|Authorized| G_Lite
-    Credits -->|Authorized| G_Flash
-    Credits -->|Authorized| G_Pro
+    B --> UI
+    C --> UI
+    UI --> Credits
+    Credits --> API
+    API -->|Stats & Verification| Stats
+    API -->|Server-side Keys| G_Lite
+    API -->|Server-side Keys| G_Flash
+    API -->|Server-side Keys| G_Pro
     G_Lite -->|Structured JSON| API
     G_Flash -->|Structured JSON| API
     G_Pro -->|Structured JSON| API
-    API -->|Response| UI
+    API --> UI
     UI --> Export
     UI --> Share
 
     %% Chat & Voice Flow
-    J -->|Text Queries| G_Flash
-    G_Flash -->|Markdown Response| J
-    J -->|Text to Speech| G_TTS
+    J -->|Client APIs / Proxies| API
+    API -->|Text Queries| G_Flash
+    G_Flash -->|Markdown Response| API
+    API -->|Text to Speech| G_TTS
     G_TTS -->|Audio Stream| J
     J <-->|WebSocket Audio| G_Live
 ```
@@ -168,8 +178,6 @@ cd SkillBridge
    ```bash
    npm run dev
    ```
-
----
 
 ## 🤝 Contributing
 Contributions make the open-source community an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.

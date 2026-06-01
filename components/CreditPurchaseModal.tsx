@@ -56,7 +56,7 @@ const CreditPurchaseModal: React.FC<CreditPurchaseModalProps> = ({ isOpen, onClo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out overflow-y-auto">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-md overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-8 duration-500 ease-out border border-slate-200 dark:border-slate-800 my-auto">
         
         {/* Header */}

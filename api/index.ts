@@ -15,7 +15,7 @@ try {
 const app = express();
 app.use(express.json());
 
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", env: "vercel" });
 });
 
@@ -67,7 +67,7 @@ app.post("/api/speech", async (req, res) => {
   }
 });
 
-app.get("/api/stats", async (req, res) => {
+app.get("/api/stats", async (_req, res) => {
   try {
     const db = getFirestore();
     const usersSnapshot = await db.collection('users').count().get();

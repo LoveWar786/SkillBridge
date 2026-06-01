@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, ChevronRight, Trash2, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, AlertCircle, Save, Receipt, Calendar, CreditCard, Shield, Trash2, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { authService, User as UserType } from '../services/authService';
 import ErrorMessage from './ErrorMessage';
 import { useNavigate } from 'react-router-dom';
@@ -164,13 +164,13 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({ isOpen, onClose, cu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out p-4">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-slate-200 dark:border-slate-800 relative animate-in zoom-in-95 slide-in-from-bottom-8 duration-500 ease-out flex flex-col md:flex-row overflow-hidden h-[85vh] md:h-[650px]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out p-4">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-slate-200 dark:border-slate-800 relative animate-in zoom-in-95 slide-in-from-bottom-8 duration-500 ease-out flex flex-col md:flex-row overflow-hidden max-h-[80vh] md:h-[650px] mb-16 sm:mb-0">
         
         {/* Global Close Button (Mobile & Desktop) */}
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 transition-colors z-50 p-2 bg-slate-100/80 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 rounded-full backdrop-blur-sm shadow-sm"
+          className="absolute top-4 right-4 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 transition-colors z-[60] p-2 bg-slate-100/80 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-700 rounded-full backdrop-blur-sm shadow-sm"
         >
           <X className="w-5 h-5" />
         </button>

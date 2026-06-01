@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ArrowRight, CheckCircle, User, Zap, Shield, Sparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle, User, Zap, Shield, Sparkles } from 'lucide-react';
 import { User as UserType } from '../services/authService';
 
 interface OnboardingModalProps {
@@ -12,7 +12,7 @@ interface OnboardingModalProps {
 
 const OnboardingModal: React.FC<OnboardingModalProps> = ({
   isOpen,
-  onClose,
+  onClose: _onClose,
   onComplete,
   user
 }) => {
@@ -20,7 +20,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [name, setName] = useState(user.name || '');
   const [experienceYears, setExperienceYears] = useState<number>(0);
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const handleNext = () => {
     if (step < totalSteps - 1) {
@@ -73,11 +73,11 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
               Full Name
             </label>
-            <input
+             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
               placeholder="e.g. John Doe"
             />
           </div>
@@ -91,7 +91,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({
               max="50"
               value={experienceYears}
               onChange={(e) => setExperienceYears(parseInt(e.target.value) || 0)}
-              className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
             />
             <p className="text-xs text-slate-500 mt-1">
               Approximate years of professional experience in your field.
@@ -128,6 +128,65 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({
           <p className="text-slate-600 dark:text-slate-300 text-sm">
             Choose the model that fits your needs. You can earn more credits by referring friends or purchasing packs.
           </p>
+        </div>
+      )
+    },
+    {
+      title: "Keyboard Shortcuts",
+      description: "Accelerate your career intelligence workflow with quick keys.",
+      icon: <Zap className="w-12 h-12 text-indigo-500 font-bold" />,
+      content: (
+        <div className="space-y-4 text-center select-none">
+          <p className="text-slate-500 dark:text-slate-400 text-sm">
+            Press these key combinations anywhere on the app to browse and execute actions faster:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-left">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block mb-1">New Session</span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">Instantly reset data and start a fresh profile analysis wizard.</p>
+              </div>
+              <div className="mt-3 flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  Alt
+                </kbd>
+                <span className="text-slate-400 text-xs">+</span>
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  N
+                </kbd>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block mb-1">Analysis History</span>
+                <p className="text-[11px] text-slate-505 text-slate-500 dark:text-slate-400 leading-normal">Scroll to or navigate straight to your past analysis history.</p>
+              </div>
+              <div className="mt-3 flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  Alt
+                </kbd>
+                <span className="text-slate-400 text-xs">+</span>
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  H
+                </kbd>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block mb-1">Toggle Theme</span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">Switch elegantly between dark and light themes instantaneously.</p>
+              </div>
+              <div className="mt-3 flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  Alt
+                </kbd>
+                <span className="text-slate-400 text-xs">+</span>
+                <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">
+                  T
+                </kbd>
+              </div>
+            </div>
+          </div>
         </div>
       )
     },

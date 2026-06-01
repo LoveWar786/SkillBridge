@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Square, Trash2, RotateCcw } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Link as LinkIcon, Search, Mic, Headphones, Download, AlertCircle, ExternalLink, Paperclip, FileText, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Square, Trash2, RotateCcw, Settings, Copy, Check } from 'lucide-react';
+import { motion } from 'motion/react';
 import ErrorMessage from './ErrorMessage';
 import ConfirmationModal from './ConfirmationModal';
 import { sendChatMessageStream, base64ToArrayBuffer, decodeAudioData } from '../services/geminiService';
@@ -91,10 +92,78 @@ Let me know how I can help you today!`
 
 const ChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const[messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      ...INITIAL_MESSAGE,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
   const [inputValue, setInputValue] = useState('');
-  const[isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [attachment, setAttachment] = useState<{ type: 'image' | 'file', preview: string, name: string } | null>(null);
+  const [hasUnread, setHasUnread] = useState(false);
+  const lastCountRef = useRef(messages.length);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const formatTimeForMessage = (msg: ChatMessage) => {
+    if (msg.timestamp) return msg.timestamp;
+    try {
+      const timestampNum = parseInt(msg.id);
+      if (!isNaN(timestampNum) && timestampNum > 1000000000) {
+        return new Date(timestampNum).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+    } catch (e) {}
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const handleCopyMessage = (content: string, id: string) => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy to clipboard', err);
+    });
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      setHasUnread(false);
+      lastCountRef.current = messages.length;
+    } else {
+      // when closed, if messages length increases (e.g. background completion), trigger unread
+      if (messages.length > lastCountRef.current) {
+        const newMessages = messages.slice(lastCountRef.current);
+        const hasBotMessage = newMessages.some(m => m.role === 'model');
+        if (hasBotMessage) {
+          setHasUnread(true);
+        }
+      }
+      lastCountRef.current = messages.length;
+    }
+  }, [messages.length, isOpen]);
+
+  const progressiveLoadingTexts = [
+    "SkillBridge AI is thinking...",
+    "SkillBridge AI is parsing your text...",
+    "SkillBridge AI is collecting information...",
+    "SkillBridge AI is analyzing your skills...",
+    "SkillBridge AI is formulating recommendations..."
+  ];
+
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLoading) {
+      setLoadingTextIndex(0);
+      interval = setInterval(() => {
+        setLoadingTextIndex((prev) => (prev + 1) % progressiveLoadingTexts.length);
+      }, 2500);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLoading]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Modals state
@@ -109,6 +178,8 @@ const ChatWidget: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isStopping, setIsStopping] = useState(false);
+  const [enableSearchGrounding, setEnableSearchGrounding] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   
   // Audio Refs
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -160,7 +231,8 @@ const ChatWidget: React.FC = () => {
       id: Date.now().toString(),
       role: 'user',
       content: messageToSend,
-      attachment: attachment ? { name: attachment.name, preview: attachment.preview, type: attachment.type } : undefined
+      attachment: attachment ? { name: attachment.name, preview: attachment.preview, type: attachment.type } : undefined,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -198,10 +270,16 @@ const ChatWidget: React.FC = () => {
           apiContent = apiContent ? apiContent + aiGuidance : aiGuidance.trim();
       }
 
-      const stream = sendChatMessageStream(history, apiContent, currentAttachment || undefined);
+      const stream = sendChatMessageStream(history, apiContent, currentAttachment || undefined, enableSearchGrounding);
       
       const botMsgId = (Date.now() + 1).toString();
-      setMessages(prev => [...prev, { id: botMsgId, role: 'model', content: '', sources: [] }]);
+      setMessages(prev => [...prev, { 
+        id: botMsgId, 
+        role: 'model', 
+        content: '', 
+        sources: [],
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
       
       isScrolledUpRef.current = false;
       setTimeout(() => scrollToBottom(true), 50);
@@ -227,7 +305,12 @@ const ChatWidget: React.FC = () => {
         } else if (e.message) {
           errorMessage = `Sorry, I'm having trouble connecting right now (${e.message}).`;
         }
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: errorMessage }]);
+        setMessages(prev => [...prev, { 
+          id: Date.now().toString(), 
+          role: 'model', 
+          content: errorMessage,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
       }
     } finally {
       setIsLoading(false);
@@ -538,12 +621,25 @@ const ChatWidget: React.FC = () => {
             if (isFirstPart) {
                 doc.setFontSize(7); // Reduced
                 doc.setFont("helvetica", "bold");
+                
+                const timeStr = msg.timestamp || "";
+
                 if (isUser) {
                     doc.setTextColor(219, 234, 254); // Blue-100
                     doc.text("YOU", xPos + 4, textY);
+                    if (timeStr) {
+                         doc.setFont("helvetica", "normal");
+                         doc.setTextColor(191, 219, 254); // lighter blue
+                         doc.text(timeStr, xPos + bubbleMaxWidth - 4, textY, { align: 'right' });
+                    }
                 } else {
                     doc.setTextColor(secondaryTextColor[0], secondaryTextColor[1], secondaryTextColor[2]); 
                     doc.text("CAREER ASSISTANT", xPos + 4, textY);
+                    if (timeStr) {
+                         doc.setFont("helvetica", "normal");
+                         doc.setTextColor(156, 163, 175); // gray
+                         doc.text(timeStr, xPos + bubbleMaxWidth - 4, textY, { align: 'right' });
+                    }
                 }
                 textY += 5; 
             }
@@ -655,9 +751,7 @@ const ChatWidget: React.FC = () => {
     }
   };
 
-  const connectLiveSession = async (skipKeyCheck: boolean | React.MouseEvent = false) => {
-    const shouldSkip = typeof skipKeyCheck === 'boolean' ? skipKeyCheck : false;
-
+  const connectLiveSession = async (_skipKeyCheck: boolean | React.MouseEvent = false) => {
     try {
       setLiveError(null);
       setIsLoading(true);
@@ -836,7 +930,10 @@ const ChatWidget: React.FC = () => {
   };
 
   const handleClearChat = () => {
-    setMessages([INITIAL_MESSAGE]);
+    setMessages([{
+      ...INITIAL_MESSAGE,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }]);
     setIsClearAllModalOpen(false);
   };
 
@@ -852,7 +949,7 @@ const ChatWidget: React.FC = () => {
       <div className="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-50 flex flex-col items-end pointer-events-none">
         
         {isOpen && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] border border-slate-200 dark:border-slate-800 mb-4 flex flex-col pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-80 sm:w-96 h-[500px] border border-slate-200 dark:border-slate-800 mb-4 flex flex-col pointer-events-auto animate-in slide-in-from-bottom-5 duration-300 overflow-hidden relative">
           {/* Header */}
           <div className="p-3 px-4 bg-blue-600 dark:bg-slate-950 text-white flex justify-between items-center shadow-md z-10">
             <div className="flex items-center gap-2">
@@ -860,13 +957,20 @@ const ChatWidget: React.FC = () => {
                     {isVoiceMode ? <Headphones className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
                 </div>
                 <div className="flex flex-col">
-                    <span className="font-bold text-sm">{isVoiceMode ? 'Live Career Talk' : 'Career Assistant'}</span>
+                    <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-sm">{isVoiceMode ? 'Live Career Talk' : 'Career Assistant'}</span>
+                        <span className="flex h-1.5 w-1.5 relative" title="AI Service Online">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-[8px] bg-emerald-500/20 text-emerald-300 dark:text-emerald-400 font-extrabold px-1 py-0.2 rounded uppercase tracking-wider select-none">Online</span>
+                    </div>
                     <span className="text-[10px] text-blue-100 opacity-90 font-medium">
                         {isVoiceMode ? 'Gemini 2.5 Flash Audio' : 'Gemini 2.5 Flash'}
                     </span>
                 </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-1.5">
                 <button 
                     onClick={() => setIsClearAllModalOpen(true)}
                     className="hover:bg-white/20 p-1.5 rounded transition-colors"
@@ -888,11 +992,68 @@ const ChatWidget: React.FC = () => {
                 >
                     <Download className="w-4 h-4" />
                 </button>
-                <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-1 rounded transition-colors">
+                <button 
+                    onClick={() => setShowSettings(!showSettings)}
+                    className={`hover:bg-white/20 p-1.5 rounded transition-colors ${showSettings ? 'bg-white/25 text-white scale-105' : ''}`}
+                    title="Chat Settings"
+                >
+                    <Settings className="w-4 h-4" />
+                </button>
+                <button onClick={() => { setIsOpen(false); setShowSettings(false); }} className="hover:bg-white/20 p-1 rounded transition-colors">
                     <X className="w-5 h-5" />
                 </button>
             </div>
           </div>
+
+          {/* Settings panel overlay */}
+          {showSettings && (
+            <div className="absolute top-[52px] left-0 right-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xl z-20 animate-in slide-in-from-top-4 duration-300">
+              <div className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-white flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-blue-500 animate-spin-slow" />
+                    <span>Chat Settings</span>
+                  </h4>
+                  <button 
+                    onClick={() => setShowSettings(false)}
+                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    Close
+                  </button>
+                </div>
+                
+                {/* Search Grounding Toggle */}
+                <div className="flex items-start justify-between gap-4 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850/80">
+                  <div className="flex-1">
+                    <span className="block text-xs font-bold text-slate-900 dark:text-white">
+                      Search Grounding
+                    </span>
+                    <p className="text-[10px] text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400 leading-relaxed mt-1">
+                      Let the AI search Google for live, up-to-date career info, listings, and real-time market trends.
+                    </p>
+                  </div>
+                  
+                  {/* Toggle Switch */}
+                  <button
+                    onClick={() => setEnableSearchGrounding(!enableSearchGrounding)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      enableSearchGrounding ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                        enableSearchGrounding ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400 leading-normal text-center select-none bg-slate-50 dark:bg-slate-950/20 py-1.5 rounded-lg border border-slate-100 dark:border-slate-850/50">
+                  Search Grounding adds verified live sources below text responses.
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Body */}
           {isVoiceMode ? (
@@ -905,13 +1066,31 @@ const ChatWidget: React.FC = () => {
                   )}
 
                   <div className="relative z-10">
-                      <div className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
-                          isLiveConnected ? 'bg-blue-500 shadow-[0_0_50px_rgba(59,130,246,0.5)] scale-110' : 'bg-slate-800'
+                      <div className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl overflow-hidden ${
+                          isLiveConnected ? 'bg-blue-600 shadow-[0_0_80px_rgba(59,130,246,0.4)] scale-110' : 'bg-slate-800'
                       }`}>
                           {isLoading ? (
                               <Loader2 className="w-12 h-12 text-white animate-spin" />
+                          ) : isLiveConnected ? (
+                              <div className="flex items-center justify-center gap-1.5 h-12 relative z-20">
+                                {[1, 2, 3, 4, 5, 6].map((i) => (
+                                  <motion.div
+                                    key={i}
+                                    className="w-1.5 bg-white/90 rounded-full"
+                                    animate={{ 
+                                      height: isPaused ? ["12px", "12px", "12px"] : ["12px", `${24 + Math.random() * 24}px`, "12px"] 
+                                    }}
+                                    transition={{
+                                      duration: 0.4 + Math.random() * 0.4,
+                                      repeat: Infinity,
+                                      ease: "easeInOut",
+                                      delay: i * 0.1
+                                    }}
+                                  />
+                                ))}
+                              </div>
                           ) : (
-                              <Mic className={`w-12 h-12 ${isLiveConnected ? 'text-white' : 'text-slate-500'}`} />
+                              <Mic className="w-12 h-12 text-slate-500" />
                           )}
                       </div>
                   </div>
@@ -1026,7 +1205,13 @@ const ChatWidget: React.FC = () => {
                 className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 dark:bg-slate-950"
               >
                 {messages.map((msg, index) => (
-                  <div key={msg.id} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <motion.div 
+                    key={msg.id} 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
                     {msg.role === 'user' && (
                       <button 
                         onClick={() => setMessageToDelete(msg.id)}
@@ -1080,22 +1265,59 @@ const ChatWidget: React.FC = () => {
                           )}
                         </div>
                       )}
+
+                      {index === messages.length - 1 && !isLoading && msg.role === 'model' && !msg.isStopped && (
+                        <div className="flex flex-wrap gap-1.5 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-700/50">
+                          {['Refine CV', 'Mock Interview', 'Salary Trends'].map((reply) => (
+                              <button 
+                                key={reply}
+                                onClick={() => handleSend(reply)}
+                                className="text-[10px] sm:text-[11px] px-2.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-200 dark:hover:border-blue-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"
+                              >
+                                {reply}
+                              </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Bottom Actions Row */}
+                      <div className={`flex items-center mt-2 ${msg.role === 'user' ? 'justify-end' : 'justify-between'}`}>
+                        {msg.role === 'model' && (
+                          <div className="flex gap-1.5 opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => handleCopyMessage(msg.content, msg.id)}
+                              className="p-1.5 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all"
+                              title="Copy reply text"
+                            >
+                              {copiedId === msg.id ? <Check className="w-3.5 h-3.5 text-emerald-500 animate-pulse" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                            {index !== 0 && (
+                              <button 
+                                onClick={() => setMessageToDelete(msg.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-all"
+                                title="Delete message"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div className={`flex items-center gap-1 opacity-75 font-mono text-[11px] select-none ${
+                          msg.role === 'user' ? 'text-blue-200' : 'text-slate-400 dark:text-slate-500'
+                        }`}>
+                          <span>{formatTimeForMessage(msg)}</span>
+                        </div>
+                      </div>
                     </div>
-                    {msg.role === 'model' && index !== 0 && (
-                      <button 
-                        onClick={() => setMessageToDelete(msg.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 transition-all self-center ml-1"
-                        title="Delete message"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  </motion.div>
                 ))}
                 {isLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-2.5 shadow-sm">
-                      <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-2.5 max-w-[85%] text-slate-600 dark:text-slate-300 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin flex-shrink-0" />
+                      <span className="text-xs font-medium animate-pulse">
+                        {progressiveLoadingTexts[loadingTextIndex]}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -1167,10 +1389,22 @@ const ChatWidget: React.FC = () => {
       )}
 
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="pointer-events-auto bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg shadow-blue-500/30 transition-all hover:scale-110 flex items-center justify-center"
+        onClick={() => {
+          setIsOpen(!isOpen);
+          if (!isOpen) setHasUnread(false);
+        }}
+        className={`pointer-events-auto bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg shadow-blue-500/30 hover:shadow-[0_0_20px_5px_rgba(59,130,246,0.5)] hover:brightness-110 active:scale-95 transition-all duration-300 hover:scale-110 flex items-center justify-center relative ${
+          !isOpen ? 'animate-subtle-pulse' : ''
+        }`}
+        title={isOpen ? "Close Chat" : "Ask SkillBridge AI Assistant"}
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6" />}
+        {!isOpen && hasUnread && (
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white dark:border-slate-900 shadow-sm"></span>
+          </span>
+        )}
       </button>
       </div>
 

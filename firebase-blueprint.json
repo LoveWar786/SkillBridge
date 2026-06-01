@@ -55,6 +55,19 @@
         "step": { "type": "string" }
       },
       "required": ["userId", "timestamp", "profile", "step"]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "User testimonial",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "content": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["name", "role", "content", "isVerified"]
     }
   },
   "firestore": {
@@ -73,6 +86,10 @@
     "/drafts/{draftId}": {
       "schema": "Draft",
       "description": "User saved drafts"
+    },
+    "/testimonials/{testimonialId}": {
+      "schema": "Testimonial",
+      "description": "User testimonials"
     }
   }
 }

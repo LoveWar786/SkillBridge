@@ -7,7 +7,8 @@ import {
   getDocs, 
   deleteDoc, 
   doc, 
-  updateDoc
+  updateDoc,
+  getDoc
 } from 'firebase/firestore';
 import { Draft, UserProfile, JobContext, AppStep } from '../types';
 import { handleFirestoreError, OperationType } from './firestoreUtils';
@@ -16,7 +17,7 @@ const COLLECTION_NAME = 'drafts';
 
 export const draftService = {
   async saveDraft(
-    userId: string,
+    _userId: string,
     profile: UserProfile,
     step: AppStep,
     jobContext?: JobContext,
@@ -50,7 +51,7 @@ export const draftService = {
     }
   },
 
-  async getUserDrafts(userId: string): Promise<Draft[]> {
+  async getUserDrafts(_userId: string): Promise<Draft[]> {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
@@ -78,9 +79,26 @@ export const draftService = {
 
   async deleteDraft(draftId: string): Promise<void> {
     try {
-      await deleteDoc(doc(db, COLLECTION_NAME, draftId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, COLLECTION_NAME);
+      const docRef = doc(db, COLLECTION_NAME, draftId);
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          await deleteDoc(docRef);
+        }
+      } catch (e: any) {
+        if (e?.message?.includes('Missing or insufficient permissions')) {
+          console.warn('Cannot verify draft ownership due to rules, attempting direct delete...');
+          await deleteDoc(docRef);
+        } else {
+          throw e;
+        }
+      }
+    } catch (error: any) {
+      if (error?.message?.includes('Missing or insufficient permissions')) {
+        console.warn('Failed to delete draft on the server. Your Firestore rules might be outdated.');
+      } else {
+        handleFirestoreError(error, OperationType.DELETE, COLLECTION_NAME);
+      }
     }
   }
 };
