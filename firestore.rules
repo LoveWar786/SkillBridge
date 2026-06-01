@@ -1,16 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // --------------------------------------------------------------------------
+    // Users Collection
+    // - Authenticated users can read user data
+    // - Users can only write to their own document (based on userId)
+    // --------------------------------------------------------------------------
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
     
+    // --------------------------------------------------------------------------
+    // Mail Collection (Firebase Extensions Email Trigger)
+    // - Authenticated users can submit emails to be sent
+    // - Users can only read emails they sent
+    // --------------------------------------------------------------------------
     match /mail/{emailId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
+    // --------------------------------------------------------------------------
+    // Analyses Collection (User's historical skillbridge analysis results)
+    // - Fully restricted to the owner of the analysis (request.auth.uid)
+    // --------------------------------------------------------------------------
     match /analyses/{analysisId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
@@ -18,11 +32,20 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
+    // --------------------------------------------------------------------------
+    // Credit Usage Collection
+    // - Users can write their own usage, but can only read their own
+    // --------------------------------------------------------------------------
     match /credit_usage/{usageId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
 
+    // --------------------------------------------------------------------------
+    // Shared Links Collection
+    // - Owner can create, update, delete, and read their own links
+    // - Anyone can read if the link is not expired
+    // --------------------------------------------------------------------------
     match /shared_links/{linkId} {
       allow read: if (request.auth != null && resource.data.userId == request.auth.uid) || 
                      (resource.data.expiresAt == null || request.time.toMillis() < resource.data.expiresAt);
@@ -31,16 +54,45 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    match /stats/global {
+    // --------------------------------------------------------------------------
+    // Global Stats Collection
+    // - Anyone can read the global stats for the landing page
+    // - Authenticated users can increment stats
+    // --------------------------------------------------------------------------
+    match /stats/{document=**} {
       allow read: if true;
       allow write: if request.auth != null;
     }
 
+    // --------------------------------------------------------------------------
+    // Drafts Collection
+    // - Fully restricted to the owner of the draft (request.auth.uid)
+    // --------------------------------------------------------------------------
     match /drafts/{draftId} {
       allow read: if request.auth != null && (resource == null || resource.data.userId == request.auth.uid);
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // --------------------------------------------------------------------------
+    // Testimonials Collection
+    // - Anyone can read testimonials IF they are verified
+    // - Anyone can create a new testimonial, but must set isVerified to false
+    // - Only Admins (via Firebase Console/Admin SDK) can update or delete
+    // --------------------------------------------------------------------------
+    match /testimonials/{testimonialId} {
+      // Allows public listing of verified testimonials on the landing page
+      allow read: if resource.data.isVerified == true;
+      
+      // Allow users to read their own testimonials to check submission status
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // Allows authenticated users to submit, but forces "isVerified = false" payload
+      allow create: if request.auth != null && request.resource.data.isVerified == false;
+      
+      // Strict lockdown - modifications only via admin panel
+      allow update, delete: if false; 
     }
   }
 }

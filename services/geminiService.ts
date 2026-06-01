@@ -313,7 +313,8 @@ export const analyzeJobReadiness = async (
 export const sendChatMessageStream = async function* (
   history: { role: string, content: string }[],
   newMessage: string,
-  attachment?: { type: 'image' | 'file', preview: string, name: string }
+  attachment?: { type: 'image' | 'file', preview: string, name: string },
+  enableSearchGrounding: boolean = true
 ) {
   // Using gemini-flash-latest for best stability and rate limits
   const model = "gemini-flash-latest";
@@ -356,7 +357,7 @@ export const sendChatMessageStream = async function* (
   // If we have an inlineData attachment (image/pdf), we cannot use googleSearch.
   const hasMultimodalAttachment = attachment && !attachment.name.toLowerCase().endsWith('.docx');
   
-  if (!hasMultimodalAttachment) {
+  if (!hasMultimodalAttachment && enableSearchGrounding) {
       config.tools = [{ googleSearch: {} }];
   }
 

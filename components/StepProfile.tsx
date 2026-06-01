@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { UserProfile, Skill, SkillLevel } from '../types';
-import { CheckCircle2, Award, Briefcase, Trash2, Plus, GripVertical, ArrowRight, Eye, PenLine } from 'lucide-react';
+import { CheckCircle2, Award, Briefcase, Trash2, Plus, GripVertical, ArrowRight, PenLine, Download, Copy, Check, FileSearch } from 'lucide-react';
+import { generateResumePDF } from '../services/pdfService';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface StepProfileProps {
   profile: UserProfile;
@@ -15,6 +17,7 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
   // 'edit' allows changes, 'preview' shows the final confirm screen
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editedProfile, setEditedProfile] = useState<UserProfile>(JSON.parse(JSON.stringify(profile)));
+  const [isCopied, setIsCopied] = useState(false);
 
   React.useEffect(() => {
     setEditedProfile(JSON.parse(JSON.stringify(profile)));
@@ -51,6 +54,25 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
       case SkillLevel.INTERMEDIATE: return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
       default: return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
     }
+  };
+
+  const handleCopyProfile = () => {
+    const textToCopy = `
+Name: ${editedProfile.fullName}
+Experience: ${editedProfile.experienceYears} Years
+Category: ${editedProfile.category || 'N/A'}
+
+Summary:
+${editedProfile.summary || 'N/A'}
+
+Skills:
+${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
+    `.trim();
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    });
   };
 
   // --- PREVIEW MODE RENDER ---
@@ -139,6 +161,22 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
                 >
                     <PenLine className="w-4 h-4" />
                     Edit Again
+                </button>
+                <button 
+                    onClick={() => generateResumePDF(editedProfile)}
+                    className="hidden sm:flex px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors items-center gap-2"
+                    title="Export Profile to PDF"
+                >
+                    <Download className="w-4 h-4" />
+                    Export PDF
+                </button>
+                <button 
+                    onClick={handleCopyProfile}
+                    className="px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
+                    title="Copy to Clipboard"
+                >
+                    {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    {isCopied ? <span className="text-emerald-500">Copied</span> : <span>Copy Text</span>}
                 </button>
                 {onSaveDraft && (
                     <button 
@@ -263,8 +301,16 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
           </div>
 
           <div className="grid grid-cols-1 gap-3">
+            <AnimatePresence>
             {editedProfile.skills.map((skill, idx) => (
-              <div key={idx} className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all">
+              <motion.div 
+                key={idx} 
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all"
+              >
                 <div className="hidden sm:block text-slate-300 dark:text-slate-600 cursor-move">
                     <GripVertical className="w-5 h-5" />
                 </div>
@@ -335,12 +381,26 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
 
             {editedProfile.skills.length === 0 && (
-                <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-                    <p className="text-slate-400">No skills listed. Add some to get started.</p>
+                <div className="text-center py-16 px-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mb-4 border border-blue-100 dark:border-blue-800/30">
+                        <FileSearch className="w-8 h-8 text-blue-500 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Skills Detected</h3>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm max-w-sm mb-6">
+                        We couldn't automatically extract any skills from your upload. Add your core competencies manually for better analysis.
+                    </p>
+                    <button
+                        onClick={addSkill}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all hover:scale-105 active:scale-95 shadow-md shadow-blue-600/20"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Add First Skill
+                    </button>
                 </div>
             )}
           </div>

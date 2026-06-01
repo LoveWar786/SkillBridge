@@ -20,7 +20,7 @@ const missingKeys = Object.entries(firebaseConfig)
 
 if (missingKeys.length > 0) {
   console.error(`Firebase configuration is incomplete. Missing: ${missingKeys.join(', ')}`);
-  console.warn("Please set these environment variables in the AI Studio Settings menu.");
+  console.warn("Please set these environment variables.");
 }
 
 const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || '(default)';

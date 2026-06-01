@@ -17,11 +17,10 @@ import AuthModal from './components/AuthModal';
 import ProfileEditModal from './components/ProfileEditModal';
 import CreditPurchaseModal from './components/CreditPurchaseModal';
 import LandingPage from './components/LandingPage';
-import { Loader2, Zap, Moon, Sun, Coins, LogIn, User as UserIcon, LogOut, Settings, Plus, AlertCircle, CheckCircle, ArrowLeft, Save } from 'lucide-react';
+import { Loader2, Zap, Moon, Sun, Coins, LogIn, LogOut, Settings, Plus, AlertCircle, ArrowLeft, BrainCircuit, AlertTriangle, BookOpen, Briefcase } from 'lucide-react';
 import ErrorMessage from './components/ErrorMessage';
 import ConfirmationModal from './components/ConfirmationModal';
 import OnboardingModal from './components/OnboardingModal';
-import { AnimatePresence } from 'motion/react';
 import Logo from './components/Logo';
 import { useNotification } from './contexts/NotificationContext';
 
@@ -32,7 +31,6 @@ const App: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | undefined>(undefined);
   const [currentAnalysisHasFeedback, setCurrentAnalysisHasFeedback] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [modelUsed, setModelUsed] = useState<string | undefined>(undefined);
   const [analysisCost, setAnalysisCost] = useState<number | undefined>(undefined);
   const [darkMode, setDarkMode] = useState(false);
@@ -206,6 +204,85 @@ const App: React.FC = () => {
     };
   }, [user?.pendingEmail, user?.uid]);
 
+  // Keyboard shortcuts listener for accessibility and speed
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ALT + N: Start a new analysis
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        const activeElement = document.activeElement;
+        const isInputField = activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' || 
+          (activeElement as HTMLElement).isContentEditable
+        );
+        if (!isInputField) {
+          e.preventDefault();
+          handleNewAnalysis();
+          showNotification('New Analysis triggered, starting fresh! [Alt + N]', 'success');
+        }
+      }
+      
+      // ALT + H: Scroll or navigate to history
+      if (e.altKey && e.key.toLowerCase() === 'h') {
+        const activeElement = document.activeElement;
+        const isInputField = activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' || 
+          (activeElement as HTMLElement).isContentEditable
+        );
+        if (!isInputField) {
+          e.preventDefault();
+          if (location.pathname !== '/') {
+            navigate('/');
+            sessionStorage.setItem('scroll_to_history', 'true');
+          } else {
+            const element = document.getElementById('analysis-history-section');
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth' });
+              showNotification('Scrolled to Analysis History [Alt + H]', 'success');
+            } else {
+              showNotification('Scroll failed: Already on dashboard board.', 'info');
+            }
+          }
+        }
+      }
+
+      // ALT + T: Toggle Dark/Light Theme
+      if (e.altKey && e.key.toLowerCase() === 't') {
+        const activeElement = document.activeElement;
+        const isInputField = activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' || 
+          (activeElement as HTMLElement).isContentEditable
+        );
+        if (!isInputField) {
+          e.preventDefault();
+          toggleDarkMode();
+          showNotification(`Theme toggled dynamically to ${!darkMode ? 'Dark' : 'Light'} Mode! [Alt + T]`, 'success');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [location.pathname, navigate, user, darkMode]);
+
+  // Handle automatic scrolling to history when transitioning routes
+  useEffect(() => {
+    if (sessionStorage.getItem('scroll_to_history') === 'true') {
+      sessionStorage.removeItem('scroll_to_history');
+      setTimeout(() => {
+        const element = document.getElementById('analysis-history-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+          showNotification('Navigated to History [Alt + H]', 'success');
+        }
+      }, 500);
+    }
+  }, [location.pathname]);
+
   useEffect(() => {
     // Removed automatic redirect to /app for logged in users
   }, [user, location.pathname, navigate]);
@@ -228,7 +305,9 @@ const App: React.FC = () => {
     setHistory(userHistory);
     const userDrafts = await draftService.getUserDrafts(loggedInUser.uid);
     setDrafts(userDrafts);
-    // Stay on homepage or current page
+    if (window.location.pathname === '/') {
+      navigate('/dashboard');
+    }
   };
 
   const handleProfileUpdateSuccess = (updatedUser: User, oldName?: string, oldEmail?: string) => {
@@ -276,7 +355,6 @@ const App: React.FC = () => {
     if (!profile) return;
 
     // Show loading state immediately for better responsiveness
-    setIsAnalyzing(true);
     setCurrentStep(AppStep.ANALYZING);
 
     const currentCredits = user ? user.credits : guestCredits;
@@ -287,7 +365,6 @@ const App: React.FC = () => {
     if (context.modelSpeed === 'deep') cost = 5;
 
     if (currentCredits < cost) {
-      setIsAnalyzing(false);
       setCurrentStep(AppStep.JOB_SELECTION);
       
       if (!user) {
@@ -310,7 +387,6 @@ const App: React.FC = () => {
         setUser({ ...user, credits: newCredits });
       } catch (error) {
         console.error("Failed to update credits:", error);
-        setIsAnalyzing(false);
         setCurrentStep(AppStep.JOB_SELECTION);
         // Don't update UI if server update fails
         return;
@@ -321,6 +397,25 @@ const App: React.FC = () => {
     }
 
     setJobContext(context);
+
+    // Auto-save user's progress of profile and context as a draft before running the async analysis
+    let autoSavedDraftId = currentDraftId;
+    if (user) {
+      try {
+        autoSavedDraftId = await draftService.saveDraft(
+          user.uid,
+          profile,
+          AppStep.JOB_SELECTION,
+          context,
+          currentDraftId
+        );
+        setCurrentDraftId(autoSavedDraftId);
+        const updatedDrafts = await draftService.getUserDrafts(user.uid);
+        setDrafts(updatedDrafts);
+      } catch (draftError) {
+        console.error("Failed to auto-save draft prior to analysis:", draftError);
+      }
+    }
 
     try {
       const { result, modelUsed: usedModel } = await analyzeJobReadiness(profile, context);
@@ -347,10 +442,11 @@ const App: React.FC = () => {
         const updatedHistory = await historyService.getUserHistory(user.uid);
         setHistory(updatedHistory);
 
-        // Delete draft if one was used
-        if (currentDraftId) {
+        // Delete draft if one was used or auto-saved
+        const draftIdToDelete = currentDraftId || autoSavedDraftId;
+        if (draftIdToDelete) {
           try {
-            await draftService.deleteDraft(currentDraftId);
+            await draftService.deleteDraft(draftIdToDelete);
             const updatedDrafts = await draftService.getUserDrafts(user.uid);
             setDrafts(updatedDrafts);
             setCurrentDraftId(undefined);
@@ -380,8 +476,6 @@ const App: React.FC = () => {
       }
       
       setCurrentStep(AppStep.JOB_SELECTION);
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -605,9 +699,9 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => navigate(user ? '/dashboard' : '/')}
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
-              title="Back to Home"
+              title={user ? "Back to Dashboard" : "Back to Home"}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -617,7 +711,7 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            <div className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border ${
+            <div className={`hidden sm:flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium border ${
               displayCredits < 2 
                 ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800' 
                 : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
@@ -636,7 +730,7 @@ const App: React.FC = () => {
             </div>
 
             {user ? (
-              <div className="flex items-center gap-1 sm:gap-3 pl-2 border-l border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-1 sm:gap-3 pl-2 sm:border-l border-slate-200 dark:border-slate-700">
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{user.name}</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pro Member</span>
@@ -684,25 +778,32 @@ const App: React.FC = () => {
 
       {/* Mobile Bottom Navigation Bar */}
       {user && (
-        <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-50 px-4 py-3 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-[70] px-4 py-3 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight">{user.name}</span>
+              <span className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight max-w-[80px] xs:max-w-[120px] truncate">{user.name}</span>
               <span className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-semibold">Pro Member</span>
             </div>
           </div>
           
           <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${
+            <div className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-bold ${
               displayCredits < 2 
                 ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' 
                 : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
             }`}>
-              <Coins className="w-3 h-3" />
+              <Coins className="w-3.5 h-3.5" />
               <span>{displayCredits}</span>
+              <button 
+                onClick={() => setIsCreditPurchaseModalOpen(true)}
+                className="ml-1 p-0.5 bg-amber-200 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-full hover:bg-amber-300 dark:hover:bg-amber-800 transition-colors"
+                title="Buy Credits"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
             </div>
             
             <button 
@@ -801,6 +902,8 @@ const App: React.FC = () => {
             result={analysisResult} 
             candidateName={profile?.fullName || user?.name}
             experienceYears={profile?.experienceYears}
+            jobRole={jobContext?.role}
+            companyName={jobContext?.companyName}
             onReset={handleReset} 
             analysisId={currentAnalysisId}
             hasFeedback={currentAnalysisHasFeedback}
@@ -909,6 +1012,7 @@ const App: React.FC = () => {
               drafts={drafts}
               onResumeDraft={handleResumeDraft}
               onDeleteDraft={handleDeleteDraft}
+              viewMode="landing"
             />
             <AuthModal 
               isOpen={isAuthModalOpen} 
@@ -953,6 +1057,63 @@ const App: React.FC = () => {
           </>
         } 
       />
+      <Route 
+        path="/dashboard" 
+        element={
+          user ? (
+          <>
+            <LandingPage 
+              onTryDemo={handleNewAnalysis} 
+              onLoginClick={() => {}}
+              onSignupClick={() => {}}
+              onBuyCredits={() => setIsCreditPurchaseModalOpen(true)}
+              darkMode={darkMode}
+              toggleDarkMode={toggleDarkMode}
+              user={user}
+              onLogout={handleLogout}
+              history={history}
+              onViewHistory={handleViewHistory}
+              onDeleteHistory={handleDeleteHistory}
+              onSettingsClick={() => setIsProfileEditModalOpen(true)}
+              drafts={drafts}
+              onResumeDraft={handleResumeDraft}
+              onDeleteDraft={handleDeleteDraft}
+              viewMode="dashboard"
+            />
+            <ProfileEditModal
+              isOpen={isProfileEditModalOpen}
+              onClose={() => setIsProfileEditModalOpen(false)}
+              currentUser={user}
+              onUpdateSuccess={handleProfileUpdateSuccess}
+            />
+            <CreditPurchaseModal
+              isOpen={isCreditPurchaseModalOpen}
+              onClose={() => setIsCreditPurchaseModalOpen(false)}
+              currentUser={user}
+              onPurchaseSuccess={handlePurchaseSuccess}
+            />
+            <ConfirmationModal
+              isOpen={isDeleteModalOpen}
+              onClose={() => setIsDeleteModalOpen(false)}
+              onConfirm={handleConfirmDelete}
+              title="Delete Analysis"
+              message="Are you sure you want to delete this analysis? This action cannot be undone."
+              confirmText="Delete"
+              isDangerous={true}
+            />
+            <ConfirmationModal
+              isOpen={isDeleteDraftModalOpen}
+              onClose={() => setIsDeleteDraftModalOpen(false)}
+              onConfirm={handleConfirmDeleteDraft}
+              title="Delete Draft"
+              message="Are you sure you want to delete this draft? Your saved progress will be lost."
+              confirmText="Delete Draft"
+              isDangerous={true}
+            />
+          </>
+          ) : <Navigate to="/" replace />
+        } 
+      />
       <Route path="/shared/:id" element={<SharedResultPage darkMode={darkMode} />} />
       <Route path="/app/*" element={mainAppContent} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -962,6 +1123,14 @@ const App: React.FC = () => {
     {!isProfileEditModalOpen && !isCreditPurchaseModalOpen && !isAuthModalOpen && (
       <ChatWidget />
     )}
+
+    {/* Hidden SVGs for PDF Generation globally available (visually hidden but mounted for canvas) */}
+    <div className="fixed opacity-0 pointer-events-none -z-50" aria-hidden="true">
+      <BrainCircuit id="pdf-icon-brain" stroke="#9333ea" strokeWidth={2} />
+      <AlertTriangle id="pdf-icon-alert" stroke="#ef4444" strokeWidth={2} />
+      <BookOpen id="pdf-icon-book" stroke="#3b82f6" strokeWidth={2} />
+      <Briefcase id="pdf-icon-briefcase" stroke="#3b82f6" strokeWidth={2} />
+    </div>
     </>
   );
 };

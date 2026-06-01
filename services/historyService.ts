@@ -5,7 +5,7 @@ import { handleFirestoreError, OperationType } from './firestoreUtils';
 import { statsService } from './statsService';
 
 export const historyService = {
-  saveAnalysis: async (userId: string, result: AnalysisResult, jobRole: string, companyName?: string, candidateName?: string, experienceYears?: number, modelUsed?: string, cost?: number): Promise<string> => {
+  saveAnalysis: async (_userId: string, result: AnalysisResult, jobRole: string, companyName?: string, candidateName?: string, experienceYears?: number, modelUsed?: string, cost?: number): Promise<string> => {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
@@ -64,7 +64,7 @@ export const historyService = {
     }
   },
 
-  getUserHistory: async (userId: string): Promise<AnalysisHistoryItem[]> => {
+  getUserHistory: async (_userId: string): Promise<AnalysisHistoryItem[]> => {
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {
@@ -117,9 +117,29 @@ export const historyService = {
         throw new Error("User must be logged in to delete analysis");
       }
       
-      await deleteDoc(doc(db, 'analyses', analysisId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `analyses/${analysisId}`);
+      const docRef = doc(db, 'analyses', analysisId);
+      try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          await deleteDoc(docRef);
+        }
+      } catch (e: any) {
+        // If getDoc fails due to outdated rules, try deleteDoc directly, or gracefully fail
+        if (e?.message?.includes('Missing or insufficient permissions')) {
+            console.warn('Cannot verify analysis ownership due to rules, attempting direct delete...');
+            await deleteDoc(docRef);
+        } else {
+            throw e;
+        }
+      }
+    } catch (error: any) {
+      // If it STILL fails with permissions, but we were just deleting,
+      // it might be because the rules don't allow delete yet or document doesn't exist
+      if (error?.message?.includes('Missing or insufficient permissions')) {
+        console.warn('Failed to delete analysis on the server. Your Firestore rules might be outdated.');
+      } else {
+        handleFirestoreError(error, OperationType.DELETE, `analyses/${analysisId}`);
+      }
     }
   },
 

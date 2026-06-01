@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { CheckCircle, X, AlertCircle } from 'lucide-react';
 
 interface NotificationToastProps {

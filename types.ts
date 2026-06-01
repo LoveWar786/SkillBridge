@@ -77,6 +77,7 @@ export interface ChatMessage {
     type: 'image' | 'file';
   };
   isStopped?: boolean;
+  timestamp?: string;
 }
 
 export interface UserFeedback {

@@ -4,9 +4,7 @@ import {
   createUserWithEmailAndPassword, 
   signOut, 
   updateProfile as updateAuthProfile,
-  updateEmail,
   updatePassword,
-  User as FirebaseUser,
   reauthenticateWithCredential,
   EmailAuthProvider,
   sendEmailVerification,
@@ -15,7 +13,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion, deleteDoc, increment } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { emailService } from './emailService';
 import { statsService } from './statsService';
 
@@ -138,7 +136,7 @@ export const authService = {
   loginWithGoogle: async (): Promise<{ user: User; isNewUser: boolean }> => {
     // Check if Firebase config is present
     if (!auth.app.options.apiKey || !auth.app.options.authDomain) {
-      throw new Error("Firebase configuration is missing. Please set the VITE_FIREBASE_* environment variables in the AI Studio Settings menu.");
+      throw new Error("Firebase configuration is missing. Please set the VITE_FIREBASE_* environment variables.");
     }
 
     const provider = new GoogleAuthProvider();
@@ -193,13 +191,21 @@ export const authService = {
     } catch (error: any) {
       console.error("Google login error:", error);
       if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error("Login cancelled. Please keep the popup open to sign in.");
+        const customError = new Error("Login cancelled. Please keep the popup open to sign in.");
+        (customError as any).code = error.code;
+        throw customError;
       } else if (error.code === 'auth/cancelled-popup-request') {
-        throw new Error("Login request cancelled. Please try again.");
+        const customError = new Error("Login request cancelled. Please try again.");
+        (customError as any).code = error.code;
+        throw customError;
       } else if (error.code === 'auth/popup-blocked') {
-        throw new Error("Login popup was blocked by your browser. Please allow popups for this site.");
+        const customError = new Error("Login popup was blocked by your browser. Please allow popups for this site.");
+        (customError as any).code = error.code;
+        throw customError;
       } else if (error.code === 'auth/timeout') {
-        throw new Error("Login timed out. This can happen if the popup is blocked or your connection is slow. Please check your browser settings and try again.");
+        const customError = new Error("Login timed out. This can happen if the popup is blocked or your connection is slow. Please check your browser settings and try again.");
+        (customError as any).code = error.code;
+        throw customError;
       }
       throw error;
     }

@@ -100,13 +100,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
       }
     } catch (err: any) {
       console.error("Google login error:", err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelled.');
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        // Ignore multiple popup requests
-        return;
-      } else if (err.code === 'auth/popup-blocked') {
-        setError('Login popup was blocked. Please allow popups for this site.');
+      const isPopupClosed = err.code === 'auth/popup-closed-by-user' || (err.message && err.message.includes('popup-closed-by-user')) || (err.message && err.message.includes('cancelled'));
+      const isPopupBlocked = err.code === 'auth/popup-blocked' || (err.message && err.message.includes('popup-blocked'));
+      const isPopupRequestCancelled = err.code === 'auth/cancelled-popup-request' || (err.message && err.message.includes('cancelled-popup-request'));
+
+      if (isPopupClosed) {
+        setError('Login cancelled. Please keep the popup open to sign in.');
+      } else if (isPopupBlocked) {
+        setError('Google login popup was blocked by your browser. Please allow popups or use Email & Password.');
+      } else if (isPopupRequestCancelled) {
+        setError('Google login request was cancelled. Please try again or use Email & Password.');
       } else {
         setError(err.message || 'Failed to sign in with Google. Please try again.');
       }
@@ -133,7 +136,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-500 ease-out p-4 overflow-y-auto">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md p-8 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-slate-200 dark:border-slate-800 relative animate-in zoom-in-95 slide-in-from-bottom-8 duration-500 ease-out my-auto">
         <button 
           onClick={onClose}
@@ -300,6 +303,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess, 
               </svg>
               Google
             </button>
+
+
 
             <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
               {view === 'login' ? "Don't have an account? " : "Already have an account? "}
