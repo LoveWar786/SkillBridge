@@ -65,7 +65,7 @@ export const parseCV = async (
   fileData: string,
   mimeType: string
 ): Promise<UserProfile> => {
-  const model = "gemini-3.1-flash-lite-preview";
+  const model = "gemini-3.5-flash";
   
   const prompt = `
     You are an expert Skills Analysis AI. Analyze the input document (Resume/CV/Bio).
@@ -167,14 +167,14 @@ export const analyzeJobReadiness = async (
   jobContext: JobContext
 ): Promise<{ result: AnalysisResult, modelUsed: string }> => {
   
-  let model = "gemini-3-flash-preview";
+  let model = "gemini-3.5-flash";
 
   switch (jobContext.modelSpeed) {
     case 'fastest':
-      model = "gemini-3.1-flash-lite-preview";
+      model = "gemini-3.1-flash-lite";
       break;
     case 'balanced':
-      model = "gemini-3-flash-preview";
+      model = "gemini-3.5-flash";
       break;
     case 'deep':
     default:
@@ -422,7 +422,7 @@ export const sendChatMessageStream = async function* (
  * Transform text into audio using the TTS model.
  */
 export const generateSpeech = async (text: string): Promise<{ audioData: string } | null> => {
-  const model = "gemini-2.5-flash-preview-tts";
+  const model = "gemini-3.1-flash-tts-preview";
   try {
     const response = await ai.models.generateContent({
         model,

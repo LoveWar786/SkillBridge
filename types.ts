@@ -13,6 +13,7 @@ export enum SkillLevel {
 }
 
 export interface Skill {
+  id?: string;
   name: string;
   category: 'Technical' | 'Soft' | 'Tool' | 'Domain';
   level: SkillLevel;

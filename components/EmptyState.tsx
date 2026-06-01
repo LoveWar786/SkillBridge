@@ -67,7 +67,7 @@ export const HistoryEmptyState: React.FC<EmptyStateProps> = ({ onAction, actionT
       </div>
 
       <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 tracking-tight">Your Career Bridge is Empty</h3>
-      <p className="text-slate-505 text-slate-500 dark:text-slate-400 max-w-sm mb-8 text-sm leading-relaxed">
+      <p className="text-slate-500 dark:text-slate-400 max-w-sm mb-8 text-sm leading-relaxed">
         You haven&apos;t run any employability analyses yet. Start a profile alignment to map your exact skill gaps and build a customized mock learning path on the spot!
       </p>
 
@@ -99,7 +99,7 @@ export const DraftsEmptyState: React.FC<EmptyStateProps> = ({ onAction, actionTe
         </div>
         <div>
           <h4 className="font-bold text-slate-800 dark:text-white text-md tracking-tight">No draft configurations saved</h4>
-          <p className="text-xs text-slate-505 text-slate-500 dark:text-slate-400 max-w-md mt-1 leading-relaxed">
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mt-1 leading-relaxed">
             You can save your profile draft or job context settings at <strong>any step</strong> of the wizard checklist, letting you resume your session instantly.
           </p>
         </div>
@@ -107,7 +107,7 @@ export const DraftsEmptyState: React.FC<EmptyStateProps> = ({ onAction, actionTe
 
       <button
         onClick={onAction}
-        className="mt-4 sm:mt-0 px-4 py-2 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl text-xs font-semibold text-slate-505 text-slate-500 transition-colors flex items-center justify-center gap-1.5 flex-shrink-0"
+        className="mt-4 sm:mt-0 px-4 py-2 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-xl text-xs font-semibold text-slate-500 transition-colors flex items-center justify-center gap-1.5 flex-shrink-0"
         id="empty-state-create-draft-btn"
       >
         <Plus className="w-3.5 h-3.5" />

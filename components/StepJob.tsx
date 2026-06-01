@@ -9,6 +9,7 @@ interface StepJobProps {
   onBuyCredits: () => void;
   isGuest: boolean;
   onSaveDraft?: (jobContext: JobContext) => void;
+  onAutoSaveDraft?: (jobContext: JobContext) => void;
   isSavingDraft?: boolean;
   initialContext?: JobContext;
 }
@@ -84,7 +85,7 @@ const COMMON_ROLES = [
   "Hospitality Manager"
 ];
 
-const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCredits, isGuest, onSaveDraft, isSavingDraft, initialContext }) => {
+const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCredits, isGuest, onSaveDraft, onAutoSaveDraft, isSavingDraft, initialContext }) => {
   const [role, setRole] = useState(initialContext?.role || '');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -92,6 +93,15 @@ const StepJob: React.FC<StepJobProps> = ({ onAnalyze, onBack, credits, onBuyCred
   const [companyName, setCompanyName] = useState(initialContext?.companyName || '');
   const [description, setDescription] = useState(initialContext?.description || '');
   const [modelSpeed, setModelSpeed] = useState<'fastest' | 'balanced' | 'deep'>(initialContext?.modelSpeed || 'balanced');
+
+  useEffect(() => {
+    if (!isGuest) {
+      const timeoutId = setTimeout(() => {
+        onAutoSaveDraft?.({ role, type, companyName, description, modelSpeed });
+      }, 5000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [role, type, companyName, description, modelSpeed, isGuest, onAutoSaveDraft]);
 
   useEffect(() => {
     if (initialContext) {
@@ -193,7 +203,7 @@ Requirements:
                       <button
                         key={r}
                         type="button"
-                        className="w-full text-left px-4 py-3 text-white hover:bg-slate-700 dark:hover:bg-slate-900 transition-colors"
+                        className="w-full text-left px-4 py-3 text-white hover:bg-slate-700 dark:hover:bg-slate-900 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                         onClick={() => {
                           setRole(r);
                           setIsDropdownOpen(false);
@@ -268,7 +278,7 @@ Requirements:
                   <button 
                     type="button"
                     onClick={loadExample}
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded transition-colors"
+                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                   >
                     <Info className="w-3 h-3" />
                     Try an example
@@ -326,7 +336,7 @@ Requirements:
                     }`}
                 >
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 dark:bg-slate-700 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 pointer-events-none text-center">
-                        Balanced analysis using Gemini 3.0 Flash. Good mix of speed and depth. Cost: 3 credits.
+                        Balanced analysis using Gemini 3.5 Flash. Good mix of speed and depth. Cost: 3 credits.
                         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 dark:bg-slate-700 rotate-45"></div>
                     </div>
                     <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full mb-2">
@@ -336,7 +346,7 @@ Requirements:
                         <span className="font-bold text-sm text-slate-800 dark:text-slate-200">Balanced</span>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Gemini 3.0 Flash</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">Gemini 3.5 Flash</span>
                     <span className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Coins className="w-3 h-3" /> 3
                     </span>
@@ -394,7 +404,7 @@ Requirements:
                 <div className="flex flex-col items-end gap-2 w-full sm:w-auto">
                     <button
                         type="submit"
-                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 flex items-center justify-center gap-2 transition-all hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-blue-200 dark:shadow-blue-900/30 flex items-center justify-center gap-2 transition-all hover:translate-x-1 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                         disabled={!role || (type === 'CompanySpecific' && !description) || !hasEnoughCredits}
                     >
                         <span>Start Analysis</span>
@@ -409,7 +419,7 @@ Requirements:
                                 <button
                                     type="button"
                                     onClick={onBuyCredits}
-                                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                                 >
                                     Buy More
                                 </button>
@@ -423,7 +433,7 @@ Requirements:
               <button 
                   type="button" 
                   onClick={onBack}
-                  className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium px-4 py-2 flex items-center gap-2"
+                  className="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium px-4 py-2 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               >
                   ← Back
               </button>
