@@ -516,11 +516,34 @@ const App: React.FC = () => {
     navigate('/app');
   };
 
-  const handleSaveDraft = async (currentProfile: UserProfile, currentJobContext?: JobContext) => {
+  const handleSaveDraft = async (currentProfile: UserProfile, currentJobContext?: JobContext, isAutoSave: boolean = false) => {
     if (!user) {
-      setAuthModalInitialView('register');
-      setIsAuthModalOpen(true);
-      showNotification('Please log in to save your progress as a draft.', 'info');
+      if (!isAutoSave) {
+        setAuthModalInitialView('register');
+        setIsAuthModalOpen(true);
+        showNotification('Please log in to save your progress as a draft.', 'info');
+      }
+      return;
+    }
+
+    if (isAutoSave) {
+      if (isSavingDraft) return; // Prevent overlapping saves
+      try {
+        const draftId = await draftService.saveDraft(
+          user.uid,
+          currentProfile,
+          currentStep,
+          currentJobContext,
+          currentDraftId
+        );
+        setCurrentDraftId(draftId);
+        
+        // Refresh drafts without showing notification modal
+        const updatedDrafts = await draftService.getUserDrafts(user.uid);
+        setDrafts(updatedDrafts);
+      } catch (error) {
+        console.error("Auto-save failed:", error);
+      }
       return;
     }
 
@@ -749,7 +772,7 @@ const App: React.FC = () => {
                 </button>
                 <button 
                   onClick={handleLogout}
-                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                   title="Logout"
                 >
                   <LogOut className="w-5 h-5" />
@@ -767,7 +790,7 @@ const App: React.FC = () => {
 
             <button
               onClick={toggleDarkMode}
-              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               aria-label="Toggle Dark Mode"
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -860,6 +883,7 @@ const App: React.FC = () => {
             onConfirm={handleProfileConfirmed}
             onBack={() => setCurrentStep(AppStep.UPLOAD)} 
             onSaveDraft={(updatedProfile) => handleSaveDraft(updatedProfile, jobContext || undefined)}
+            onAutoSaveDraft={(updatedProfile) => handleSaveDraft(updatedProfile, jobContext || undefined, true)}
             isSavingDraft={isSavingDraft}
             isLoggedIn={!!user}
           />
@@ -873,6 +897,7 @@ const App: React.FC = () => {
             onBuyCredits={() => setIsCreditPurchaseModalOpen(true)}
             isGuest={!user}
             onSaveDraft={(context) => profile && handleSaveDraft(profile, context)}
+            onAutoSaveDraft={(context) => profile && handleSaveDraft(profile, context, true)}
             isSavingDraft={isSavingDraft}
             initialContext={jobContext || undefined}
           />
@@ -908,7 +933,7 @@ const App: React.FC = () => {
             analysisId={currentAnalysisId}
             hasFeedback={currentAnalysisHasFeedback}
             onFeedbackSubmit={handleFeedbackSubmit}
-            modelUsed={modelUsed || (jobContext?.modelSpeed === 'fastest' ? 'Gemini 2.5 Flash Lite' : jobContext?.modelSpeed === 'balanced' ? 'Gemini 3.0 Flash' : 'Gemini 3.1 Pro')}
+            modelUsed={modelUsed || (jobContext?.modelSpeed === 'fastest' ? 'Gemini 3.1 Flash Lite' : jobContext?.modelSpeed === 'balanced' ? 'Gemini 3.5 Flash' : 'Gemini 3.1 Pro')}
             cost={analysisCost || (jobContext?.modelSpeed === 'fastest' ? 2 : jobContext?.modelSpeed === 'balanced' ? 3 : 5)}
           />
         )}
@@ -974,7 +999,7 @@ const App: React.FC = () => {
           <button 
             onClick={handleResendVerification}
             disabled={isResendingVerification}
-            className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+            className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1 rounded-md text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
             {isResendingVerification ? (
               <><Loader2 className="w-3 h-3 animate-spin" /> Sending...</>

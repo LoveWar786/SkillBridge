@@ -966,7 +966,7 @@ const ChatWidget: React.FC = () => {
                         <span className="text-[8px] bg-emerald-500/20 text-emerald-300 dark:text-emerald-400 font-extrabold px-1 py-0.2 rounded uppercase tracking-wider select-none">Online</span>
                     </div>
                     <span className="text-[10px] text-blue-100 opacity-90 font-medium">
-                        {isVoiceMode ? 'Gemini 2.5 Flash Audio' : 'Gemini 2.5 Flash'}
+                        {isVoiceMode ? 'Gemini 3.5 Flash Audio' : 'Gemini 3.5 Flash'}
                     </span>
                 </div>
             </div>
@@ -1028,7 +1028,7 @@ const ChatWidget: React.FC = () => {
                     <span className="block text-xs font-bold text-slate-900 dark:text-white">
                       Search Grounding
                     </span>
-                    <p className="text-[10px] text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400 leading-relaxed mt-1">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed mt-1">
                       Let the AI search Google for live, up-to-date career info, listings, and real-time market trends.
                     </p>
                   </div>
@@ -1048,7 +1048,7 @@ const ChatWidget: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="text-[10px] text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400 leading-normal text-center select-none bg-slate-50 dark:bg-slate-950/20 py-1.5 rounded-lg border border-slate-100 dark:border-slate-850/50">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal text-center select-none bg-slate-50 dark:bg-slate-950/20 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800/50">
                   Search Grounding adds verified live sources below text responses.
                 </div>
               </div>
@@ -1057,28 +1057,28 @@ const ChatWidget: React.FC = () => {
 
           {/* Body */}
           {isVoiceMode ? (
-              <div className="flex-1 bg-slate-900 overflow-y-auto relative min-h-0">
-                <div className="flex flex-col items-center justify-center text-center p-6 space-y-8 min-h-full">
+              <div className="flex-1 bg-slate-900 overflow-y-auto overflow-x-hidden relative min-h-0">
+                <div className="flex flex-col items-center justify-center text-center p-4 space-y-5 min-h-full">
                   {isLiveConnected && (
                       <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
-                          <div className="w-64 h-64 bg-blue-500 rounded-full animate-ping"></div>
+                          <div className="w-48 h-48 bg-blue-500 rounded-full animate-ping"></div>
                       </div>
                   )}
 
                   <div className="relative z-10">
-                      <div className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl overflow-hidden ${
-                          isLiveConnected ? 'bg-blue-600 shadow-[0_0_80px_rgba(59,130,246,0.4)] scale-110' : 'bg-slate-800'
+                      <div className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-xl overflow-hidden ${
+                          isLiveConnected ? 'bg-blue-600 shadow-[0_0_60px_rgba(59,130,246,0.3)] scale-105' : 'bg-slate-800'
                       }`}>
                           {isLoading ? (
-                              <Loader2 className="w-12 h-12 text-white animate-spin" />
+                              <Loader2 className="w-10 h-10 text-white animate-spin" />
                           ) : isLiveConnected ? (
-                              <div className="flex items-center justify-center gap-1.5 h-12 relative z-20">
+                              <div className="flex items-center justify-center gap-1 h-8 relative z-20">
                                 {[1, 2, 3, 4, 5, 6].map((i) => (
                                   <motion.div
                                     key={i}
-                                    className="w-1.5 bg-white/90 rounded-full"
+                                    className="w-1 bg-white/90 rounded-full"
                                     animate={{ 
-                                      height: isPaused ? ["12px", "12px", "12px"] : ["12px", `${24 + Math.random() * 24}px`, "12px"] 
+                                      height: isPaused ? ["8px", "8px", "8px"] : ["8px", `${16 + Math.random() * 16}px`, "8px"] 
                                     }}
                                     transition={{
                                       duration: 0.4 + Math.random() * 0.4,
@@ -1090,7 +1090,7 @@ const ChatWidget: React.FC = () => {
                                 ))}
                               </div>
                           ) : (
-                              <Mic className="w-12 h-12 text-slate-500" />
+                              <Mic className="w-10 h-10 text-slate-500" />
                           )}
                       </div>
                   </div>
@@ -1136,27 +1136,27 @@ const ChatWidget: React.FC = () => {
                         />
                       ) : (
                         <>
-                           <h3 className="text-white text-xl font-semibold mb-2">
+                           <h3 className="text-white text-lg font-semibold mb-1">
                                {isLiveConnected ? "Listening..." : "Tap Start to Talk"}
                            </h3>
                            
                            {isLiveConnected && (
-                             <div className="flex flex-col items-center gap-4 mt-4 mb-6 bg-white/5 p-4 rounded-2xl border border-white/10 w-full mx-auto">
-                               <div className="flex items-center gap-6">
+                             <div className="flex flex-col items-center gap-3 mt-2 mb-3 bg-white/5 p-3 rounded-2xl border border-white/10 w-full mx-auto">
+                               <div className="flex items-center gap-4">
                                  <button
                                    onClick={togglePlayback}
-                                   className="p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"
+                                   className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white"
                                    title={isPaused ? "Resume" : "Pause"}
                                  >
-                                   {isPaused ? <Play className="w-6 h-6 fill-current" /> : <Pause className="w-6 h-6 fill-current" />}
+                                   {isPaused ? <Play className="w-5 h-5 fill-current" /> : <Pause className="w-5 h-5 fill-current" />}
                                  </button>
                                  
-                                 <div className="flex items-center gap-3 flex-1 min-w-[120px]">
+                                 <div className="flex items-center gap-2.5 flex-1 min-w-[100px]">
                                    <button 
                                      onClick={() => handleVolumeChange(volume === 0 ? 1 : 0)}
                                      className="text-white/70 hover:text-white transition-colors"
                                    >
-                                     {volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                                     {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                                    </button>
                                    <input
                                      type="range"
@@ -1165,14 +1165,14 @@ const ChatWidget: React.FC = () => {
                                      step="0.01"
                                      value={volume}
                                      onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                                     className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                     className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
                                    />
                                  </div>
                                </div>
                              </div>
                            )}
 
-                           <p className="text-slate-400 text-sm max-w-[200px] mx-auto">
+                           <p className="text-slate-400 text-xs max-w-[200px] mx-auto leading-relaxed">
                                {isLiveConnected 
                                 ? "Ask me anything about your career path, resume, or interview prep." 
                                 : "Start a real-time voice session to practice answering interview questions."}
@@ -1221,14 +1221,25 @@ const ChatWidget: React.FC = () => {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <div className={`max-w-[85%] rounded-2xl p-2.5 text-[13px] ${
-                      msg.role === 'user' 
-                        ? 'bg-blue-600 text-white rounded-tr-none' 
-                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none shadow-sm'
-                    }`}>
-                      <div className={`break-words ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
-                          <SimpleMarkdown text={msg.content} />
-                      </div>
+                    <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      {msg.role === 'model' && index === messages.length - 1 && isLoading && (
+                        <div className="flex items-center gap-1.5 mb-1.5 pl-1.5 text-slate-500 dark:text-slate-400">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+                          <span className="text-[11px] font-medium animate-pulse">
+                            {msg.content === '' ? progressiveLoadingTexts[loadingTextIndex] : "SkillBridge AI is responding..."}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {!(msg.role === 'model' && index === messages.length - 1 && isLoading && msg.content === '') && (
+                        <div className={`w-full rounded-2xl p-2.5 text-[13px] ${
+                          msg.role === 'user' 
+                            ? 'bg-blue-600 text-white rounded-tr-none' 
+                            : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-tl-none shadow-sm'
+                        }`}>
+                          <div className={`break-words ${msg.role === 'user' ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                              <SimpleMarkdown text={msg.content} />
+                          </div>
                       
                       {msg.attachment && (
                         <div className={`mt-2 p-2 rounded-lg flex items-center gap-2 ${msg.role === 'user' ? 'bg-blue-700' : 'bg-slate-100 dark:bg-slate-700'}`}>
@@ -1282,7 +1293,7 @@ const ChatWidget: React.FC = () => {
 
                       {/* Bottom Actions Row */}
                       <div className={`flex items-center mt-2 ${msg.role === 'user' ? 'justify-end' : 'justify-between'}`}>
-                        {msg.role === 'model' && (
+                        {msg.role === 'model' && !(index === messages.length - 1 && isLoading) && (
                           <div className="flex gap-1.5 opacity-100 transition-opacity">
                             <button 
                               onClick={() => handleCopyMessage(msg.content, msg.id)}
@@ -1309,18 +1320,10 @@ const ChatWidget: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                    )}
+                    </div>
                   </motion.div>
                 ))}
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-2.5 max-w-[85%] text-slate-600 dark:text-slate-300 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                      <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin flex-shrink-0" />
-                      <span className="text-xs font-medium animate-pulse">
-                        {progressiveLoadingTexts[loadingTextIndex]}
-                      </span>
-                    </div>
-                  </div>
-                )}
                 <div ref={messagesEndRef} />
               </div>
 

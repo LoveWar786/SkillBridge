@@ -159,7 +159,7 @@ const OnboardingModal: React.FC<OnboardingModalProps> = ({
             <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between">
               <div>
                 <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 tracking-wider uppercase block mb-1">Analysis History</span>
-                <p className="text-[11px] text-slate-505 text-slate-500 dark:text-slate-400 leading-normal">Scroll to or navigate straight to your past analysis history.</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">Scroll to or navigate straight to your past analysis history.</p>
               </div>
               <div className="mt-3 flex items-center gap-1">
                 <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200 shadow-sm">

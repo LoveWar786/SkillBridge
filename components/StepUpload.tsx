@@ -241,7 +241,7 @@ const StepUpload: React.FC<StepUploadProps> = ({ onProfileLoaded }) => {
         </div>
         <div className="w-1 h-1 bg-slate-300 dark:bg-slate-700 rounded-full"></div>
         <div className="flex items-center gap-2">
-            <span className="font-bold">Advanced Gemini 3.0 & 3.1</span>
+            <span className="font-bold">Advanced Gemini 3.5 Models</span>
             <span>Reasoning</span>
         </div>
       </div>

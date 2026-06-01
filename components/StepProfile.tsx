@@ -9,19 +9,37 @@ interface StepProfileProps {
   onConfirm: (updatedProfile: UserProfile) => void;
   onBack: () => void;
   onSaveDraft?: (updatedProfile: UserProfile) => void;
+  onAutoSaveDraft?: (updatedProfile: UserProfile) => void;
   isSavingDraft?: boolean;
   isLoggedIn?: boolean;
 }
 
-const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, onSaveDraft, isSavingDraft, isLoggedIn }) => {
+const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, onSaveDraft, onAutoSaveDraft, isSavingDraft, isLoggedIn }) => {
   // 'edit' allows changes, 'preview' shows the final confirm screen
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [editedProfile, setEditedProfile] = useState<UserProfile>(JSON.parse(JSON.stringify(profile)));
   const [isCopied, setIsCopied] = useState(false);
 
+  const [newlyAddedIds, setNewlyAddedIds] = useState<Set<string>>(new Set());
+
   React.useEffect(() => {
-    setEditedProfile(JSON.parse(JSON.stringify(profile)));
+    const profileWithIds = {
+      ...profile,
+      skills: profile.skills.map(s => ({ 
+        ...s, 
+        id: s.id || Math.random().toString(36).substring(2, 9) 
+      }))
+    };
+    setEditedProfile(JSON.parse(JSON.stringify(profileWithIds)));
   }, [profile]);
+
+  React.useEffect(() => {
+    if (!isLoggedIn) return;
+    const timeoutId = setTimeout(() => {
+      onAutoSaveDraft?.(editedProfile);
+    }, 5000);
+    return () => clearTimeout(timeoutId);
+  }, [editedProfile, isLoggedIn, onAutoSaveDraft]);
 
   const handleFieldChange = (field: keyof UserProfile, value: string | number) => {
     setEditedProfile(prev => ({ ...prev, [field]: value }));
@@ -39,12 +57,15 @@ const StepProfile: React.FC<StepProfileProps> = ({ profile, onConfirm, onBack, o
   };
 
   const addSkill = () => {
+    const newId = Math.random().toString(36).substring(2, 9);
     const newSkill: Skill = {
+      id: newId,
       name: 'New Skill',
       category: 'Technical',
       level: SkillLevel.BEGINNER,
       evidence: ''
     };
+    setNewlyAddedIds(prev => new Set(prev).add(newId));
     setEditedProfile(prev => ({ ...prev, skills: [newSkill, ...prev.skills] }));
   };
 
@@ -172,7 +193,7 @@ ${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
                 </button>
                 <button 
                     onClick={handleCopyProfile}
-                    className="px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2"
+                    className="px-4 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                     title="Copy to Clipboard"
                 >
                     {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -293,7 +314,7 @@ ${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
             </h4>
             <button
                 onClick={addSkill}
-                className="text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                className="text-sm flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-bold bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
                 <Plus className="w-4 h-4" />
                 Add Skill
@@ -304,12 +325,28 @@ ${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
             <AnimatePresence>
             {editedProfile.skills.map((skill, idx) => (
               <motion.div 
-                key={idx} 
+                key={skill.id || idx} 
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
+                animate={{ 
+                  opacity: 1, 
+                  y: 0, 
+                  scale: newlyAddedIds.has(skill.id || '') ? [1, 1.02, 1] : 1,
+                  boxShadow: newlyAddedIds.has(skill.id || '') ? [
+                    '0 0 0 0px rgba(59, 130, 246, 0)',
+                    '0 0 0 4px rgba(59, 130, 246, 0.3)',
+                    '0 0 0 0px rgba(59, 130, 246, 0)'
+                  ] : '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+                }}
                 exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all"
+                transition={{ 
+                  duration: newlyAddedIds.has(skill.id || '') ? 0.5 : 0.2, 
+                  ease: "easeOut" 
+                }}
+                className={`group flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 rounded-xl border transition-all ${
+                  newlyAddedIds.has(skill.id || '') 
+                    ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/20 z-10' 
+                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50'
+                } hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md`}
               >
                 <div className="hidden sm:block text-slate-300 dark:text-slate-600 cursor-move">
                     <GripVertical className="w-5 h-5" />
@@ -396,7 +433,7 @@ ${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
                     </p>
                     <button
                         onClick={addSkill}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all hover:scale-105 active:scale-95 shadow-md shadow-blue-600/20"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all hover:scale-105 active:scale-95 shadow-md shadow-blue-600/20 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                     >
                         <Plus className="w-5 h-5" />
                         Add First Skill
@@ -411,7 +448,7 @@ ${editedProfile.skills.map(s => `- ${s.name} (${s.level})`).join('\n')}
         <div className="flex gap-3">
             <button 
                 onClick={onBack}
-                className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors"
+                className="px-6 py-3 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
                 Back to Upload
             </button>

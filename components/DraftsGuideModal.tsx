@@ -60,7 +60,7 @@ const DraftsGuideModal: React.FC<DraftsGuideModalProps> = ({ isOpen, onClose }) 
             </div>
             <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800">
               <span className="text-xs font-bold text-blue-600 dark:text-blue-400 block mb-1">2. Instant save</span>
-              <p className="text-[10px] text-slate-550 text-slate-500 dark:text-slate-400">Your draft is created and listed on your main dashboard.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Your draft is created and listed on your main dashboard.</p>
             </div>
           </div>
         </div>
@@ -157,7 +157,7 @@ const DraftsGuideModal: React.FC<DraftsGuideModalProps> = ({ isOpen, onClose }) 
                 <button
                   onClick={handleBack}
                   disabled={step === 0}
-                  className={`px-4 py-2 text-xs text-slate-505 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors font-medium ${step === 0 ? 'opacity-0 pointer-events-none' : ''}`}
+                  className={`px-4 py-2 text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors font-medium ${step === 0 ? 'opacity-0 pointer-events-none' : ''}`}
                 >
                   Back
                 </button>

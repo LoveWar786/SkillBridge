@@ -140,6 +140,37 @@ const LandingPage: React.FC<LandingPageProps> = ({
     exportHistoryToCSV([item]);
   };
 
+  const handleExportAllPDFs = async () => {
+    setIsExportAllOpen(false);
+    if (!history || history.length === 0) return;
+    setExportingAll(true);
+    setExportTotal(history.length);
+    setExportProgress(0);
+
+    for (let i = 0; i < history.length; i++) {
+        const el = history[i];
+        try {
+            await generatePDFReport({
+                candidateName: el.candidateName || "User",
+                jobRole: el.jobRole || "Report",
+                companyName: el.companyName || "",
+                experienceYears: el.experienceYears,
+                timestamp: el.timestamp,
+                result: el.result
+            });
+        } catch (e) {
+            console.error("Failed to export", e);
+        }
+        setExportProgress(i + 1);
+        await new Promise(res => setTimeout(res, 300));
+    }
+    setTimeout(() => {
+        setExportingAll(false);
+        setExportProgress(0);
+        setExportTotal(0);
+    }, 1500);
+  };
+
   // States for the automatic interactive demo tour
   const [demoStep, setDemoStep] = useState(0);
   const [demoProgress, setDemoProgress] = useState(0);
@@ -154,6 +185,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
   // States for Export Dropdowns
   const [hasSharedTestimonial, setHasSharedTestimonial] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportTotal, setExportTotal] = useState(0);
 
   useEffect(() => {
     if (!user) {
@@ -271,7 +305,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
   if (viewMode === 'dashboard' && user) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 overflow-hidden relative selection:bg-blue-500/30">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 overflow-x-hidden relative selection:bg-blue-500/30">
         <SubmitTestimonialModal 
           isOpen={isTestimonialModalOpen}
           onClose={() => setIsTestimonialModalOpen(false)}
@@ -312,7 +346,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <div className="flex items-center gap-4">
             <button 
               onClick={toggleDarkMode}
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
+              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
@@ -332,14 +366,14 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button 
                 onClick={onSettingsClick}
-                className="hidden sm:block p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                className="hidden sm:block p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                 title="Settings"
               >
                 <Settings className="w-5 h-5" />
               </button>
               <button 
                 onClick={onLogout}
-                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                 title="Logout"
               >
                 <LogOut className="w-5 h-5" />
@@ -368,7 +402,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 )}
                 <button 
                   onClick={onTryDemo}
-                  className="flex items-center justify-center flex-1 md:hidden gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-md whitespace-nowrap"
+                  className="flex items-center justify-center flex-1 md:hidden gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-md whitespace-nowrap focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                 >
                   <Plus className="w-4 h-4" />
                   Start New Analysis
@@ -384,7 +418,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl text-blue-600 dark:text-blue-400">
                   <LayoutDashboard className="w-6 h-6" />
                 </div>
-                <span className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-505 text-slate-500">All Time</span>
+                <span className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">All Time</span>
               </div>
               <h3 className="text-3xl font-bold mb-1">{history.length}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Total Analyses</p>
@@ -395,7 +429,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="p-3 bg-amber-100 dark:bg-amber-900/30 rounded-xl text-amber-600 dark:text-amber-400">
                   <Save className="w-6 h-6" />
                 </div>
-                <span className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-505 text-slate-500">In Progress</span>
+                <span className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">In Progress</span>
               </div>
               <h3 className="text-3xl font-bold mb-1">{drafts.length}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Saved Drafts</p>
@@ -406,7 +440,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl text-purple-600 dark:text-purple-400">
                   <Zap className="w-6 h-6" />
                 </div>
-                <button onClick={onBuyCredits || onTryDemo} className="text-xs font-medium px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 hover:bg-purple-200 transition-colors rounded-lg">
+                <button onClick={onBuyCredits || onTryDemo} className="text-xs font-medium px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 hover:bg-purple-200 transition-colors rounded-lg focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none">
                   Buy More
                 </button>
               </div>
@@ -428,7 +462,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button 
                 onClick={onTryDemo}
-                className="w-full py-3 bg-white text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3 bg-white text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               >
                 <Plus className="w-5 h-5" />
                 New Analysis
@@ -439,16 +473,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
           {/* Drafts Section */}
           <div className="mb-12">
             <div 
-              className="flex items-center justify-between gap-3 mb-6 cursor-pointer hover:opacity-80 transition-opacity"
+              className="flex items-center gap-3 mb-6 cursor-pointer hover:opacity-80 transition-opacity w-fit"
               onClick={() => setIsDraftsExpanded(!isDraftsExpanded)}
             >
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
                   <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                 </div>
-                <h2 className="text-xl font-bold">Resume Progress</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold">Resume Progress</h2>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isDraftsExpanded ? '' : '-rotate-90'}`} />
+                </div>
               </div>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${isDraftsExpanded ? '' : '-rotate-90'}`} />
             </div>
             
             <AnimatePresence>
@@ -545,7 +581,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               <div className="flex items-center justify-between md:justify-start gap-4 w-full md:w-auto">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    <History className="w-5 h-5 text-slate-55 text-slate-500" />
+                    <History className="w-5 h-5 text-slate-500" />
                   </div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold">Analysis History</h2>
@@ -617,43 +653,42 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 >
                   <div className="relative flex-1 sm:w-64">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                      <Search className="h-4 w-4 text-slate-400 dark:text-slate-505 text-slate-500" />
+                      <Search className="h-4 w-4 text-slate-400 dark:text-slate-400" />
                     </span>
                     <input
                       type="text"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       placeholder="Search by role, company..."
-                      className="w-full pl-9 pr-4 py-2 text-sm bg-slate-55 dark:bg-slate-950 border border-slate-202 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-505 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-colors bg-white"
+                      className="w-full pl-9 pr-4 py-2 text-sm bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500 transition-colors"
                     />
                   </div>
                   <div className="relative hidden md:block">
                     <button
-                      onClick={() => setIsExportAllOpen(!isExportAllOpen)}
-                      className="flex items-center gap-2 px-4 py-2 border border-slate-202 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-slate-700 dark:text-slate-300 shadow-sm hover:cursor-pointer"
+                      onClick={() => !exportingAll && setIsExportAllOpen(!isExportAllOpen)}
+                      className="flex items-center gap-2 px-4 py-2 border border-slate-202 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-slate-700 dark:text-slate-300 shadow-sm hover:cursor-pointer relative overflow-hidden"
                     >
-                      <Download className="w-4 h-4 text-purple-500" />
-                      <span>Export All</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      {exportingAll ? (
+                        <>
+                          <Loader2 className="w-4 h-4 text-purple-500 animate-spin" />
+                          <span>Generating ({exportProgress}/{exportTotal})</span>
+                          <div
+                            className="absolute bottom-0 left-0 h-1 bg-purple-500 transition-all duration-300 pointer-events-none"
+                            style={{ width: `${(exportProgress / exportTotal) * 100}%` }}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 text-purple-500" />
+                          <span>Export All</span>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                        </>
+                      )}
                     </button>
-                    {isExportAllOpen && (
+                    {isExportAllOpen && !exportingAll && (
                       <div className="absolute right-0 mt-1.5 z-[60] w-48 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200">
                         <button
-                          onClick={() => {
-                            history.forEach((el, index) => {
-                              setTimeout(() => {
-                                generatePDFReport({
-                                  candidateName: el.candidateName || "User",
-                                  jobRole: el.jobRole || "Report",
-                                  companyName: el.companyName || "",
-                                  experienceYears: el.experienceYears,
-                                  timestamp: el.timestamp,
-                                  result: el.result
-                                });
-                              }, index * 400);
-                            });
-                            setIsExportAllOpen(false);
-                          }}
+                          onClick={handleExportAllPDFs}
                           className="w-full px-4 py-2.5 text-left text-xs sm:text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 hover:cursor-pointer group"
                         >
                           <FileText className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
@@ -726,11 +761,11 @@ const LandingPage: React.FC<LandingPageProps> = ({
                               <div>
                                 <p className="font-bold text-slate-900 dark:text-white">{item.jobRole}</p>
                                 {item.companyName && (
-                                  <p className="text-sm text-slate-505 text-slate-500">{item.companyName}</p>
+                                  <p className="text-sm text-slate-500">{item.companyName}</p>
                                 )}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-sm text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400">
+                            <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
                               {formatDate(item.timestamp)}
                             </td>
                             <td className="px-6 py-4">
@@ -924,8 +959,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                     </>
                   ) : (
-                    <div className="p-12 text-center text-slate-505 text-slate-500 dark:text-slate-404 text-slate-400">
-                      <div className="w-12 h-12 bg-slate-105 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <div className="p-12 text-center text-slate-500 dark:text-slate-400">
+                      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-3">
                         <Search className="w-6 h-6 text-slate-400" />
                       </div>
                       <p className="font-semibold text-slate-800 dark:text-white mb-1">No matching results found</p>
@@ -966,7 +1001,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
               {onBuyCredits && (
                 <button 
                   onClick={onBuyCredits}
-                  className="ml-1 p-0.5 bg-amber-200 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-full hover:bg-amber-300 dark:hover:bg-amber-800 transition-colors"
+                  className="ml-1 p-0.5 bg-amber-200 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-full hover:bg-amber-300 dark:hover:bg-amber-800 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                   title="Buy Credits"
                 >
                   <Plus className="w-3 h-3" />
@@ -976,7 +1011,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
             
             <button 
               onClick={onSettingsClick}
-              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               title="Edit Profile"
             >
               <Settings className="w-5 h-5" />
@@ -989,10 +1024,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
   // LOGGED OUT LANDING VIEW
   return (
-    <div className={`min-h-screen text-slate-900 dark:text-slate-50 overflow-hidden relative selection:bg-blue-500/30 transition-colors duration-500 ${darkMode ? 'bg-slate-950' : 'bg-[#fafafa]'}`}>
-      
-      {/* Heavy Glassmorphism & Noise Background */}
-      <div className="absolute inset-0 pointer-events-none z-0">
+    <div className={`h-screen w-screen overflow-hidden fixed inset-0 text-slate-900 dark:text-slate-50 selection:bg-blue-500/30 transition-colors duration-500 ${darkMode ? 'bg-slate-950' : 'bg-[#fafafa]'}`}>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
         
         {/* Dynamic Blobs */}
@@ -1015,6 +1048,9 @@ const LandingPage: React.FC<LandingPageProps> = ({
         {/* Grid Pattern mask */}
         <div className={`absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-30`} />
       </div>
+      
+      {/* Scrollable Content Wrapper */}
+      <div className="relative z-10 w-full h-screen overflow-y-auto overflow-x-hidden scroll-smooth">
 
       {/* Navbar */}
       <nav className="relative z-10 container mx-auto px-6 py-6 flex items-center justify-between">
@@ -1033,7 +1069,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
         >
           <button 
             onClick={toggleDarkMode}
-            className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors rounded-full hover:bg-slate-200 dark:hover:bg-slate-800"
+            className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             aria-label="Toggle dark mode"
           >
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
@@ -1051,13 +1087,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
             <>
               <button 
                 onClick={onLoginClick}
-                className="text-sm font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-2 sm:px-4 py-2 hidden sm:block"
+                className="text-sm font-medium hover:text-blue-600 dark:hover:text-blue-400 transition-colors px-2 sm:px-4 py-2 hidden sm:block focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               >
                 Log in
               </button>
               <button 
                 onClick={onSignupClick}
-                className="text-sm font-medium bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full hover:scale-105 transition-transform shadow-lg"
+                className="text-sm font-medium bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full hover:scale-105 transition-transform shadow-lg focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               >
                 Sign up
               </button>
@@ -1091,18 +1127,18 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <button 
               onClick={onTryDemo}
-              className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-full font-bold text-lg shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 group hover:cursor-pointer"
+              className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 rounded-full font-bold text-lg shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 group hover:cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               {user ? 'Start New Analysis' : 'Analyze Your Profile Free'}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
-            <a 
-              href="#showcase"
+            <button 
+              onClick={() => document.getElementById('showcase')?.scrollIntoView({ behavior: 'smooth' })}
               className="w-full sm:w-auto px-8 py-4 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-white rounded-full font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               <Play className="w-4 h-4 text-slate-700 dark:text-slate-300 fill-slate-700 dark:fill-slate-300" />
               See How It Works
-            </a>
+            </button>
           </div>
         </motion.div>
 
@@ -1225,14 +1261,14 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* Interactive Screen Sandbox (Right Side) */}
-          <div className="lg:col-span-8 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-3xl p-6 relative shadow-xl overflow-hidden min-h-[460px] flex flex-col justify-between text-slate-800 dark:text-slate-200">
+          <div className="lg:col-span-8 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 relative shadow-xl overflow-hidden min-h-[460px] flex flex-col justify-between text-slate-800 dark:text-slate-200">
             {/* Window bar */}
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-3 mb-4 font-sans">
               <div className="flex items-center gap-2 font-sans">
                 <div className="w-2.5 h-2.5 rounded-full bg-rose-500/90" />
                 <div className="w-2.5 h-2.5 rounded-full bg-amber-500/90" />
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/90" />
-                <span className="text-xs text-slate-505 text-slate-550 dark:text-slate-400 ml-1.5 font-medium">
+                <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5 font-medium">
                   {demoStep === 0 && "Step 1: Resume Intake Module"}
                   {demoStep === 1 && "Step 2: Interactive Profile Review"}
                   {demoStep === 2 && "Step 3: Target Job Alignment"}
@@ -1263,7 +1299,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
                     <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 shadow-xs space-y-4">
                       {/* Fake Tabs */}
-                      <div className="flex p-0.5 bg-slate-100 dark:bg-slate-850 rounded-lg text-[11px] font-semibold">
+                      <div className="flex p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-[11px] font-semibold">
                         <div className="flex-1 py-1.5 text-center rounded-md bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-xs flex items-center justify-center gap-1.5">
                           <FileText className="w-3.5 h-3.5" /> Upload CV / Profile
                         </div>
@@ -1284,7 +1320,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                         </div>
                         <div>
                           <p className="text-xs font-bold text-slate-800 dark:text-white">Extracting skills from resume_alex_chen.pdf</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-505 mt-1">Found 8 distinct skills • Ready in seconds</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Found 8 distinct skills • Ready in seconds</p>
                         </div>
                       </div>
                     </div>
@@ -1462,7 +1498,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between border-t border-slate-850 pt-2 text-slate-500">
+                      <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-slate-500">
                         <div className="flex items-center gap-2">
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
                           <span className="text-[10px] animate-pulse">Running Diagnostic Chains...</span>
@@ -1527,7 +1563,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                       <div className="space-y-1.5">
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest font-sans">RECOMMENDED ALTERNATIVE ROLES</span>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-850/80">
+                          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-800/80">
                             <div className="flex justify-between items-center text-[10px] font-bold text-slate-800 dark:text-slate-200">
                               <span>Staff Design Architect</span>
                               <span className="text-purple-600 dark:text-purple-400 font-extrabold">92% Match</span>
@@ -1536,7 +1572,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                               <div className="bg-purple-500 h-full rounded-full" style={{ width: "92%" }} />
                             </div>
                           </div>
-                          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-850/80">
+                          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-100 dark:border-slate-800/80">
                             <div className="flex justify-between items-center text-[10px] font-bold text-slate-800 dark:text-slate-200">
                               <span>Platform Engineer</span>
                               <span className="text-blue-600 dark:text-blue-400 font-extrabold">74% Match</span>
@@ -1888,21 +1924,21 @@ const LandingPage: React.FC<LandingPageProps> = ({
           <h2 className="text-4xl md:text-5xl font-extrabold mb-6 leading-tight">
             Stop Guessing. Discover Your Exact Match Alignment Now.
           </h2>
-          <p className="text-slate-300 dark:text-slate-404 text-slate-400 text-base md:text-lg max-w-xl mx-auto mb-10 leading-relaxed">
+          <p className="text-slate-300 dark:text-slate-400 text-base md:text-lg max-w-xl mx-auto mb-10 leading-relaxed">
             Take less than 2 minutes to upload your professional background and isolate exactly what stands between you and your top target companies.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
             <button 
               onClick={onTryDemo}
-              className="w-full sm:w-auto px-8 py-4 bg-white text-slate-900 hover:bg-slate-100 rounded-full font-bold text-lg transition-transform hover:-translate-y-1 shadow-lg hover:cursor-pointer"
+              className="w-full sm:w-auto px-8 py-4 bg-white text-slate-900 hover:bg-slate-100 rounded-full font-bold text-lg transition-transform hover:-translate-y-1 shadow-lg hover:cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               Start New Analysis
             </button>
             {!user && (
               <button 
                 onClick={onSignupClick}
-                className="w-full sm:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-lg transition-transform hover:-translate-y-1 shadow-lg hover:cursor-pointer"
+                className="w-full sm:w-auto px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold text-lg transition-transform hover:-translate-y-1 shadow-lg hover:cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
               >
                 Create Unlimited Profile
               </button>
@@ -1925,6 +1961,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 };
